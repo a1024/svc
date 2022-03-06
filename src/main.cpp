@@ -29,8 +29,7 @@
 #endif
 
 //	#define		SINGLE_EXECUTABLE
-	#define		BM_CKECKED
-//	#define		PRINT_PROGRESS
+	#define		PRINT_PROGRESS
 //	#define		ANS_GUIDE
 
 
@@ -106,7 +105,7 @@ int			strcmp_ci(const char *s1, const char *s2)
 {
 	while(*s1&&*s2&&*s1==*s2)
 		++s1, ++s2;
-	return *s1<*s2;
+	return *s1-*s2;
 }
 void		get_filenames_from_folder(std::string const &path, const char **extensions, int ext_count, std::vector<std::string> &v)
 {
@@ -131,7 +130,10 @@ void		get_filenames_from_folder(std::string const &path, const char **extensions
 		{
 			int ext_len=(int)strlen(extensions[k2]);
 			if(!strcmp_ci(data.cFileName+len-ext_len, extensions[k2]))
+			{
 				v.push_back(data.cFileName);
+				break;
+			}
 		}
 	}
 	FindClose(hSearch);
@@ -234,7 +236,7 @@ void		test()
 {
 	svc_set_loglevel(SVC_LOG_PROFILER);
 	const int
-		iw=64, ih=64,
+		iw=8, ih=8,
 		image_size=iw*ih;
 	unsigned buf[image_size]=
 	{
@@ -255,11 +257,12 @@ void		test()
 		//0x08090A0B, 0x0C0D0E0F,
 	};
 	for(int k=0;k<image_size;++k)
-		buf[k]=0x55555555;
+		buf[k]=k/8;
+	//	buf[k]=0x55555555;
 	//printf("src:\n"), print_ibuf((int*)buf, iw, ih, 0, iw, 0, ih);
 	auto encoder=svc_enc_start(iw, ih, 4, 8, SVC_UINT8, 1, 1);	SVC_CHECK();
 	svc_enc_add_frame(encoder, buf);			SVC_CHECK();
-	svc_enc_add_frame(encoder, buf);			SVC_CHECK();
+//	svc_enc_add_frame(encoder, buf);			SVC_CHECK();
 	unsigned long long csize=0;
 	auto ptr=svc_enc_finish(encoder, &csize);	SVC_CHECK();
 //	print_sbuf(ptr, csize);
@@ -270,11 +273,11 @@ void		test()
 	auto decoder=svc_dec_start(cdata, csize);	SVC_CHECK();
 	SVCHeader info={};
 	svc_dec_get_info(decoder, &info);			SVC_CHECK();
-	int f1[image_size], f2[image_size];
+	int f1[image_size];
 	svc_dec_get_frame(decoder, f1, buf);		SVC_CHECK();
 	//printf("decoded 1:\n"), print_ibuf(f1, iw, ih, 0, iw, 0, ih);
-	svc_dec_get_frame(decoder, f2, buf);		SVC_CHECK();
-	//printf("decoded 2:\n"), print_ibuf(f2, iw, ih, 0, iw, 0, ih);
+//	svc_dec_get_frame(decoder, f1, buf);		SVC_CHECK();
+	//printf("decoded 2:\n"), print_ibuf(f1, iw, ih, 0, iw, 0, ih);
 	svc_cleanup(decoder);		SVC_CHECK();
 
 	delete[] cdata;
@@ -345,7 +348,7 @@ int			main(int argc, char **argv)
 	auto t1=time_sec();
 	printf("Simple Video Codec - %s %s\n\n", __DATE__, __TIME__);
 
-	//test();//
+	test();//
 
 	bool bm=argc>1&&!strcmp(argv[1], "-bm");
 	if(argc!=4&&!bm)
@@ -375,6 +378,7 @@ int			main(int argc, char **argv)
 	}
 	const char *extensions[]=
 	{
+		".jpg",
 		".png",
 	};
 	const int ext_count=SIZEOF(extensions);
@@ -401,6 +405,7 @@ int			main(int argc, char **argv)
 		if(!nframes)
 		{
 			printf("Error: no PNG files found in %s\n", argv[2]);
+			exit_success();
 			return 1;
 		}
 		printf("Found %d frames\n", nframes);
@@ -421,6 +426,7 @@ int			main(int argc, char **argv)
 			if(!original_image)
 			{
 				printf("Error: no PNG files found in %s\n", argv[2]);
+				exit_success();
 				return 1;
 			}
 		//}
@@ -440,10 +446,14 @@ int			main(int argc, char **argv)
 				original_image=stbi_load((path+filenames[k]).c_str(), &iw2, &ih2, &nch2, 4);
 				if(!original_image||iw2!=iw||ih2!=ih)
 				{
-					printf("Error: different frame dimensions\n");
+					if(original_image)
+						printf("Error: different frame dimensions: expected %dx%d got %dx%d\n", iw, ih, iw2, ih2);
+					else
+						printf("Error: failed to open %s\n", (path+filenames[k]).c_str());
 					if(original_image)
 						free(original_image);
 					svc_cleanup(handle);	SVC_CHECK();
+					exit_success();
 					return 1;
 				}
 			//}
@@ -470,6 +480,7 @@ int			main(int argc, char **argv)
 			{
 				printf("Error: cannot open %s for writing.\n", argv[3]);
 				svc_cleanup(handle);	SVC_CHECK();
+				exit_success();
 				return 1;
 			}
 			fwrite(data, 1, outsize, file);
@@ -488,6 +499,7 @@ int			main(int argc, char **argv)
 		if(!bytesize)
 		{
 			printf("Error: cannot open %s", argv[2]);
+			exit_success();
 			return 1;
 		}
 		file=fopen_bin(argv[2], true);

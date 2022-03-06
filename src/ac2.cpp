@@ -28,7 +28,7 @@
 #endif
 #include		<algorithm>
 
-	#define		ANS_CL_EMUATE_RENDER2GLTEXTURE
+//	#define		ANS_CL_EMUATE_RENDER2GLTEXTURE
 
 //	#define		ANS_ENC_DIV_FREE
 //	#define		ANS_PRINT_STATE2
@@ -1792,6 +1792,8 @@ bool			ans9_prep2(const void *hist_ptr, int bytespersymbol, SymbolInfo *info, un
 			if(kc>=bytespersymbol)
 				break;
 			sum+=si.freq;
+
+			//si.freq=kc<<8|k;//
 		}
 		if(kc<bytespersymbol&&CDF2sym)
 		{
@@ -1961,9 +1963,9 @@ int				ans9_encode(const void *src, unsigned char *&dst, unsigned long long &dst
 		
 		printf("Preview:\n");
 		int kprint=compressed_bitsize>>3;
-		const int bytelimit=500;
-		if(kprint>bytelimit)
-			kprint=bytelimit;
+		//const int bytelimit=500;
+		//if(kprint>bytelimit)
+		//	kprint=bytelimit;
 		for(int k=0;k<kprint;++k)
 			printf("%02X-", dst[dst_start+k]&0xFF);
 		printf("\n");
@@ -1996,13 +1998,13 @@ int				ans9_decode(const unsigned char *src, unsigned long long &src_idx, unsign
 	{
 		if(src_sizes[k]==0x8000)//bypass
 		{
-			ctx->receiver_sizes[k]=-byteoffset;
 			byteoffset+=bypass_size;
+			ctx->receiver_sizes[k-1]=-byteoffset;
 		}
 		else
 		{
-			ctx->receiver_sizes[k]=byteoffset;
 			byteoffset+=src_sizes[k]*sizeof(short);
+			ctx->receiver_sizes[k-1]=byteoffset;//points at the end of range
 		}
 	}
 	src_idx+=headersize+byteoffset;

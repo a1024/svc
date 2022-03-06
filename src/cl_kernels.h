@@ -25,8 +25,10 @@
 #define clamp(...)			(__VA_ARGS__)
 #endif
 
-//	#define		ANS_PRINT_WRITES	idx==0
-//	#define		ANS_PRINT_READS		idx==0&&kc==0
+//	#define		ANS_PRINT_WARNINGS	idx==0
+	#define		ANS_PRINT_WRITES	idx==0
+	#define		ANS_PRINT_READS		idx==0&&kc==0
+	#define		ANS_PRINT_STATE		idx==0
 
 //	#define		PRINT_BOUNDS
 //	#define		PRINT_ENC_STATE		idx==0
@@ -444,27 +446,45 @@ __kernel void ans_enc2D32(__global unsigned char *src, __constant int *dim, __gl
 #define EMIT_UINT16(U16)		if(bit_idx<bitsizelimit)cdata[bit_idx>>4]=U16; bit_idx+=16
 
 	__global SymbolInfo *stats=in_stats+(kc<<8);
-	unsigned state=0x10000;
-	int bypass=0;
+	//printf("idx %d kc %d (%d,%d)", idx, kc, kbx, kby);
+	//if(!idx)//
+	//	for(int k=0;k<1024;++k)
+	//		printf("%d %02X freq %04X", k>>8, k&255, stats[k].freq);
+	//return;//
+
+	unsigned state=0x00010000;
+	int bypass=0, bypass_mask=-bypass, encode_mask=~bypass_mask;
+	//if(!idx)
+	//	printf("bypass %08X bypass_mask %08X encode_mask %08X", bypass, bypass_mask, encode_mask);
 again:
 	for(int ky=y1;ky<y2;++ky)
 	{
 		int yoffset=iw*ky;
-		for(int kx=bytespersymbol*(yoffset+x1)+kc, xend=bytespersymbol*(yoffset+x2)+kc;kx<x2;kx+=bytespersymbol)
+		for(int kx=bytespersymbol*(yoffset+x1)+kc, xend=bytespersymbol*(yoffset+x2)+kc;kx<xend;kx+=bytespersymbol)
 		{
 			unsigned char symbol=src[kx];
-			__global SymbolInfo *info=stats+(symbol&-bypass);//fetch
-			if(state>info->renorm_limit)//renormalize
-			{
-				EMIT_UINT16((unsigned short)state);
-#ifdef ANS_PRINT_WRITES
-				if(ANS_PRINT_WRITES)
-					printf("kc %d (%d,%d) x %08X->%08X idx %d", kc, kx, ky, state, state>>16, bit_idx);//
-#endif
-				state>>=16;
-			}
+			__global SymbolInfo *info=stats+(symbol&encode_mask);//fetch
 			if(info->freq)//update
-				state=(state/info->freq<<16)+state%info->freq+(bypass?symbol<<8:info->CDF);
+			{
+				if(state>info->renorm_limit)//renormalize
+				{
+					EMIT_UINT16((unsigned short)state);
+#ifdef ANS_PRINT_WRITES
+					if(ANS_PRINT_WRITES)
+						printf("kc %d (%d,%d) x %08X->%08X idx %d", kc, kx, ky, state, state>>16, bit_idx);//
+#endif
+					state>>=16;
+				}
+				state=(state/info->freq<<16)+state%info->freq+(bypass_mask&symbol<<8|info->CDF);
+#ifdef ANS_PRINT_STATE
+			if(ANS_PRINT_STATE)
+				printf("kc %d (%d,%d) x %08X s %02X freq %04X lim %08X idx %d", kc, kx, ky, state, symbol, info->freq, info->renorm_limit, bit_idx);
+#endif
+			}
+#ifdef ANS_PRINT_WARNINGS
+			else if(ANS_PRINT_WARNINGS)
+				printf("kc %d (%d,%d) x %08X s %02X freq %04X=ZERO lim %08X idx %d, CDF %08X", kc, kx, ky, state, symbol, info->freq, info->renorm_limit, bit_idx, bypass_mask&symbol<<8|info->CDF);
+#endif
 		}
 	}
 	EMIT_UINT16((unsigned short)state);
@@ -476,11 +496,12 @@ again:
 	if(!bypass)
 	{
 		int size0=block_w*block_h<<3;
-		bypass=bit_idx>size0;
+		bypass=bit_idx>size0, bypass_mask=-bypass, encode_mask=~bypass_mask;
 		if(bypass)
 		{
+			//printf("bypass kc %d (%d,%d) idx %d", kc, kbx, kby, bit_idx);
 			bit_idx=0;
-			state=0x10000;
+			state=0x00010000;
 			stats=in_stats+(bytespersymbol<<8);
 			goto again;
 		}
@@ -511,22 +532,16 @@ __kernel void ans_dec2D32(__global unsigned char *dst, __constant int *dim, __gl
 	//for(int kc=0;kc<32;++kc)
 	//{
 	int bit_idx=sizes[bp_idx]<<3;
-	int bypass=bit_idx<0;
+	int bypass=bit_idx<0, bypass_mask=-bypass, encode_mask=~bypass_mask;
+	//if(!idx)
+	//	printf("bypass %08X bypass_mask %08X encode_mask %08X", bypass, bypass_mask, encode_mask);
 	if(bypass)
 		bit_idx=-bit_idx;
 	__global SymbolInfo *stats=in_stats+((bypass?bytespersymbol:kc)<<8);
+	__global unsigned short *cdata=(__global unsigned short*)src;
 	__global unsigned char *CDF2sym=in_CDF2sym+((bypass?bytespersymbol:kc)<<16);
 	unsigned state=0;
-#ifdef PRINT_READS
-#define READ_UINT16()		state=state<<16|(src[bit_idx>>5]>>(bit_idx&31)&0xFF), bit_idx+=16;	\
-	if(PRINT_READS)	\
-	{	\
-		int bit_idx=ctx[kp].bit_idx-8;	\
-		printf("read %04X idx %d src[%d]>>%d", ctx[kp].code, ctx[kp].bit_idx, bit_idx>>5, bit_idx&31);	\
-	}
-#else
-#define READ_UINT16()		state=state<<16|(src[bit_idx>>5]>>(bit_idx&31)&0xFFFF), bit_idx+=16
-#endif
+#define READ_UINT16()		bit_idx-=16, state=state<<16|cdata[bit_idx>>4]
 	READ_UINT16();
 	READ_UINT16();
 #ifdef ANS_PRINT_READS
@@ -548,17 +563,26 @@ __kernel void ans_dec2D32(__global unsigned char *dst, __constant int *dim, __gl
 	//}
 	//else
 	//{
-	for(int ky=y1;ky<y2;++ky)
+	for(int ky=y2-1;ky>=y1;--ky)
 	{
 		int yoffset=iw*ky;
-		for(int kx=bytespersymbol*(yoffset+x1)+kc, xend=bytespersymbol*(yoffset+x2)+kc;kx<x2;kx+=bytespersymbol)
+		for(int kx=bytespersymbol*(yoffset+x2-1)+kc, xend=bytespersymbol*(yoffset+x1)+kc;kx>=xend;kx-=bytespersymbol)
 		{
 			unsigned short c=(unsigned short)state;
 			unsigned char symbol=CDF2sym[c];
 			dst[kx]=symbol;
-			__global SymbolInfo *info=stats+(symbol&-bypass);
-			state=info->freq*(state>>16)+c-(bypass?symbol<<8:info->CDF);
-			if(state<0x10000)
+			__global SymbolInfo *info=stats+(symbol&encode_mask);
+			if(info->freq)
+				state=info->freq*(state>>16)+c-(bypass_mask&symbol<<8|info->CDF);
+#ifdef ANS_PRINT_WARNINGS
+			else if(ANS_PRINT_WARNINGS)
+				printf("kc %d (%d,%d) x %08X s %02X freq %04X=ZERO idx %d", kc, kx, ky, state, symbol, info->freq, bit_idx);
+#endif
+#ifdef ANS_PRINT_STATE
+			if(ANS_PRINT_STATE)
+				printf("kc %d (%d,%d) x %08X s %02X freq %04X idx %d", kc, kx, ky, state, symbol, info->freq, bit_idx);
+#endif
+			if(state<0x00010000)
 			{
 				READ_UINT16();
 #ifdef ANS_PRINT_READS
