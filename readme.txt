@@ -17,7 +17,7 @@ ANS on OpenCL-GPU:
 	Decode: 697.85 MB/s
 - Encode each frame separately:
 	Encode: 1850.82 MB/s
-	Decode: 7248.65 MB/s
+	Decode: 7248.65 MB/s	18262.65 MB/s after optimizations
 
 TODO:
 - Optimize the codec
