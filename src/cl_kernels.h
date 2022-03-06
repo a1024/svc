@@ -59,50 +59,34 @@ __kernel void zeromem		(__global int *dst)
 	dst[idx]=0;
 }
 
-//worksize = padded_h
-__kernel void pad	(__global int *src, __global int *dst, __constant int *dim)
+//worksize = padded_w*padded_h
+__kernel void pad_const		(__global int *src, __global int *dst, __constant int *dim)
 {
-	int ky=get_global_id(0);
+	int idx=get_global_id(0);
 	int iw=dim[DIM_W0],
 		ih=dim[DIM_H0],
 		block_xcount=dim[DIM_BLOCK_XCOUNT],
-		block_ycount=dim[DIM_BLOCK_YCOUNT],
 		block_w=dim[DIM_BLOCK_W],
-		block_h=dim[DIM_BLOCK_H],
-		padded_w=block_xcount*block_w,
-		padded_h=block_ycount*block_h;
-	__global int *srcrow=src+iw*ky, *dstrow=dst+padded_w*ky;
-	for(int kx=0;kx<iw;++kx)
-	{
-		if(ky<ih)
-			dstrow[kx]=srcrow[kx];
-		else
-			dstrow[kx]=0;
-	}
-	for(int kx=iw;kx<padded_w;++kx)
-	{
-		dstrow[kx]=0;
-	}
+		padded_w=block_xcount*block_w;
+	int kx=idx%padded_w, ky=idx/padded_w;
+	if(kx>=iw)
+		kx=iw-1;
+	if(ky>=ih)
+		ky=ih-1;
+	dst[idx]=src[iw*ky+kx];
 }
 
-//worksize = ih
-__kernel void unpad	(__global int *dst, __global int *src, __constant int *dim)
+//worksize = iw*ih
+__kernel void unpad			(__global int *dst, __global int *src, __constant int *dim)
 {
-	int ky=get_global_id(0);
+	int idx=get_global_id(0);
 	int iw=dim[DIM_W0],
 		ih=dim[DIM_H0],
 		block_xcount=dim[DIM_BLOCK_XCOUNT],
-		block_ycount=dim[DIM_BLOCK_YCOUNT],
 		block_w=dim[DIM_BLOCK_W],
-		block_h=dim[DIM_BLOCK_H],
-		padded_w=block_xcount*block_w,
-		padded_h=block_ycount*block_h;
-	//if(ky<ih)
-	//{
-		__global int *srcrow=src+iw*ky, *dstrow=dst+padded_w*ky;
-		for(int kx=0;kx<iw;++kx)
-			dstrow[kx]=srcrow[kx];
-	//}
+		padded_w=block_xcount*block_w;
+	int kx=idx%iw, ky=idx/iw;
+	dst[idx]=src[padded_w*ky+kx];
 }
 
 
@@ -374,6 +358,12 @@ typedef struct
 		bias,
 		renorm_limit;
 } SymbolInfo;
+
+//worksize = bytespersymbol*256
+//__kernel void ans_calc_histogram(__global unsigned char *src, __global int *histogram)
+//{
+//}
+
 //worksize = block_ycount*block_xcount*bytespersymbol
 __kernel void ans_enc2D32(__global unsigned char *src, __constant int *dim, __global SymbolInfo *in_stats, __global int *dst, __global int *sizes)
 {
@@ -388,12 +378,14 @@ __kernel void ans_enc2D32(__global unsigned char *src, __constant int *dim, __gl
 	int y1=block_w*kby, y2=y1+block_w,
 		x1=block_h*kbx, x2=x1+block_h;
 	int block_idx=bytespersymbol*(block_xcount*kby+kbx)+kc;
-	__global int *cdata=dst+(block_idx<<dim[DIM_LOGALLOCCOUNT]);
+	__global unsigned short *cdata=(__global unsigned short*)(dst+(block_idx<<dim[DIM_LOGALLOCCOUNT]));
 	int bit_idx=0, bitsizelimit=1<<(dim[DIM_LOGALLOCCOUNT]+5);
-#define EMIT_UINT16(U16)		if(bit_idx<bitsizelimit)cdata[bit_idx>>5]|=(U16)<<(bit_idx&31); bit_idx+=16
+#define EMIT_UINT16(U16)		if(bit_idx<bitsizelimit)cdata[bit_idx>>4]=U16; bit_idx+=16
 
 	__global SymbolInfo *stats=in_stats+(kc<<8);
 	unsigned state=0x10000;
+	//for(int k=0;k<bitsizelimit>>5;++k)//initialize cdata by calling zeromem()
+	//	cdata[k]=0;
 	for(int ky=y1;ky<y2;++ky)
 	{
 		int yoffset=iw*ky;

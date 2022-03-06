@@ -2,7 +2,7 @@
 
 //preceded by 'OCL_' eg: OCL_zeromem
 CLFUNC(zeromem, 1)
-CLFUNC(pad, 3)
+CLFUNC(pad_const, 3)
 CLFUNC(unpad, 3)
 
 CLFUNC(abac_enc2D32_prep, 3)

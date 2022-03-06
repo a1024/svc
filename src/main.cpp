@@ -306,9 +306,7 @@ void		benchmark(int frame_w, int frame_h, int nframes, bool verify, int loud)
 	printf("Compressed size: %lld bytes, ratio = %lf\n", csize, (double)iw*ih*nch*nframes/csize);
 	printf(
 		"Encoded %d %dx%dx%d frames in:\n"
-		"  %lld cycles, %lf cycles/frame\n"
-		"  %lf sec, %lf ms/frame\n"
-		"  %.2lf MB/s\n",
+		"  %lld cycles, %lf cycles/frame  %lf sec, %lf ms/frame  %.2lf MB/s\n",
 		nframes, iw, ih, nch,
 		t2-t1, (double)(t2-t1)/nframes,
 		s2-s1, 1000.*(s2-s1)/nframes,
@@ -333,10 +331,7 @@ void		benchmark(int frame_w, int frame_h, int nframes, bool verify, int loud)
 	s2=time_sec();
 	svc_cleanup(decoder);		SVC_CHECK();
 	printf(
-		"Decoded in:\n"
-		"  %lld cycles, %lf cycles/frame\n"
-		"  %lf sec, %lf ms/frame\n"
-		"  %.2lf MB/s\n",
+		"Decoded in:  %lld cycles, %lf cycles/frame  %lf sec, %lf ms/frame  %.2lf MB/s\n",
 		t2-t1, (double)(t2-t1)/nframes,
 		s2-s1, 1000.*(s2-s1)/nframes,
 		iw*ih*nch*nframes/((s2-s1)*1024*1024));

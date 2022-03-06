@@ -28,6 +28,8 @@
 #endif
 #include		<algorithm>
 
+	#define		ANS_CL_EMUATE_RENDER2GLTEXTURE
+
 //	#define		ANS_ENC_DIV_FREE
 //	#define		ANS_PRINT_STATE2
 //	#define		ANS_PRINT_STATE//X
@@ -1427,7 +1429,7 @@ int				abac9_encode(const void *src, unsigned char *&dst, unsigned long long &ds
 		args[0]=ctx->buf_image0;
 		args[1]=ctx->buf_image_p;
 		args[2]=ctx->buf_dim;
-		ocl_call_kernel(OCL_pad, ctx->block_h*ctx->block_ycount, args, 3);
+		ocl_call_kernel(OCL_pad_const, ctx->padded_w*ctx->padded_h, args, 3);
 		padded_image=ctx->buf_image_p;
 	}
 	else
@@ -1641,7 +1643,7 @@ int				abac9_decode(const unsigned char *src, unsigned long long &src_idx, unsig
 		args[0]=ctx->buf_image0;
 		args[1]=ctx->buf_image_p;
 		args[2]=ctx->buf_dim;
-		ocl_call_kernel(OCL_unpad, ctx->ih, args, 3);
+		ocl_call_kernel(OCL_unpad, ctx->iw*ctx->ih, args, 3);
 	}
 	ctx->buf_image0.read(dst);
 	PROF(READ);
@@ -1768,15 +1770,25 @@ bool			ans9_prep2(const void *hist_ptr, int bytespersymbol, SymbolInfo *info, un
 
 			if(CDF2sym&&k)
 			{
-				for(int k2=c_info[k-1].CDF;k2<(int)si.CDF;++k2)
-					c_CDF2sym[k2]=k-1;
+				int dstsize=si.CDF-c_info[k-1].CDF;
+				if(dstsize)
+					memset(c_CDF2sym+c_info[k-1].CDF, k-1, dstsize);
+
+				//int src=k-1;
+				//memfill(c_CDF2sym+c_info[k-1].CDF, &src, si.CDF-c_info[k-1].CDF, sizeof(char));//sic
+
+				//for(int k2=c_info[k-1].CDF;k2<(int)si.CDF;++k2)
+				//	c_CDF2sym[k2]=k-1;
 			}
 			sum+=si.freq;
 		}
 		if(CDF2sym)
 		{
-			for(int k2=c_info[ANS_NLEVELS-1].CDF;k2<ANS_L;++k2)
-				c_CDF2sym[k2]=ANS_NLEVELS-1;
+			int dstsize=ANS_L-c_info[ANS_NLEVELS-1].CDF;
+			if(dstsize)
+				memset(c_CDF2sym+c_info[ANS_NLEVELS-1].CDF, ANS_NLEVELS-1, dstsize);
+			//for(int k2=c_info[ANS_NLEVELS-1].CDF;k2<ANS_L;++k2)
+			//	c_CDF2sym[k2]=ANS_NLEVELS-1;
 		}
 		if(sum!=ANS_L)
 			FAIL("histogram sum = %d != %d", sum, ANS_L);
@@ -1815,6 +1827,7 @@ int				ans9_encode(const void *src, unsigned char *&dst, unsigned long long &dst
 	for(int kc=0;kc<ctx->bytespersymbol;++kc)
 		if(!ans_calc_histogram(buffer+kc, ctx->block_w*ctx->block_h, ctx->bytespersymbol, (unsigned short*)(dst+dst_s2+kc*(ANS_NLEVELS*sizeof(short))), 16))
 			return false;
+	PROF(HISTOGRAM);
 	if(!ans9_prep2(dst+dst_s2, ctx->bytespersymbol, ctx->symbolinfo, ctx->CDF2sym, loud))
 		return false;
 	dst_s2=dst_size+sizes_offset;
@@ -1826,17 +1839,17 @@ int				ans9_encode(const void *src, unsigned char *&dst, unsigned long long &dst
 	if(ctx->buf_image_p.handle)
 	{
 		ocl_sync();
+		PROF(SEND_FRAME);
 		args[0]=ctx->buf_image0;
 		args[1]=ctx->buf_image_p;
 		args[2]=ctx->buf_dim;
-		ocl_call_kernel(OCL_pad, ctx->block_h*ctx->block_ycount, args, 3);
+		ocl_call_kernel(OCL_pad_const, ctx->padded_w*ctx->padded_h, args, 3);
 		padded_image=ctx->buf_image_p;
 	}
 	else
 		padded_image=ctx->buf_image0;
 	ctx->buf_stats.write(ctx->symbolinfo);
-	ocl_call_kernel(OCL_zeromem, ctx->alloccount, &ctx->buf_cdata, 1);
-	//ocl_call_kernel(OCL_zeromem, ctx->blockplanecount, &ctx->buf_sizes, 1);//no need
+	//ocl_call_kernel(OCL_zeromem, ctx->alloccount, &ctx->buf_cdata, 1);
 	ocl_sync();
 	PROF(INITIALIZE);
 	//printf("GPU image:\n");//
@@ -1976,7 +1989,7 @@ int				ans9_decode(const unsigned char *src, unsigned long long &src_idx, unsign
 	PROF(PREP);
 	
 	CLBuffer padded_image=ctx->buf_image_p.handle?ctx->buf_image_p:ctx->buf_image0;
-	ocl_call_kernel(OCL_zeromem, ctx->iw*ctx->ih, &padded_image, 1);
+	//ocl_call_kernel(OCL_zeromem, ctx->iw*ctx->ih, &padded_image, 1);//no need
 	ctx->buf_stats.write(ctx->symbolinfo);
 	ctx->buf_cdata.write_sub(src_cdata, 0, icount);
 	ctx->buf_sizes.write(ctx->receiver_sizes);
@@ -2002,9 +2015,14 @@ int				ans9_decode(const unsigned char *src, unsigned long long &src_idx, unsign
 		args[0]=ctx->buf_image0;
 		args[1]=ctx->buf_image_p;
 		args[2]=ctx->buf_dim;
-		ocl_call_kernel(OCL_unpad, ctx->ih, args, 3);
+		ocl_call_kernel(OCL_unpad, ctx->iw*ctx->ih, args, 3);
+#ifdef ANS_CL_EMUATE_RENDER2GLTEXTURE
+		ocl_sync();
+#endif
 	}
+#ifndef ANS_CL_EMUATE_RENDER2GLTEXTURE
 	ctx->buf_image0.read(dst);
+#endif
 	PROF(READ);
 	//printf("image:\n");
 	//print_clmem_as_ints(ctx->buf_image);

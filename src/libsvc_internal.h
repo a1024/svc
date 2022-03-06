@@ -30,6 +30,8 @@
 //	#define		ANS_SSE2//TODO
 //	#define		ANS_64BIT
 
+//	#define		SUBTRACT_PREV_FRAME
+
 	#define		DEBUG_PRINT
 
 //utility
@@ -45,6 +47,26 @@ extern char		g_buf[G_BUF_SIZE];
 #if 0
 double			time_sec();
 #endif
+static void		memfill(void *dst, const void *src, size_t dstbytes, size_t srcbytes)
+{
+	size_t copied;
+	char *d=(char*)dst;
+	const char *s=(const char*)src;
+	if(dstbytes<srcbytes)
+	{
+		memcpy(dst, src, dstbytes);
+		return;
+	}
+	copied=srcbytes;
+	memcpy(d, s, copied);
+	while(copied<<1<=dstbytes)
+	{
+		memcpy(d+copied, d, copied);
+		copied<<=1;
+	}
+	if(copied<dstbytes)
+		memcpy(d+copied, d, dstbytes-copied);
+}
 
 //math
 #if 0

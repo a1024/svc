@@ -15,7 +15,6 @@
 //along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include		"libsvc_internal.h"
-//#include		"OpenCL_wrap.h"
 #include		<stdio.h>
 #include		<stdarg.h>
 int				loud=SVC_LOG_NONE;
@@ -129,7 +128,6 @@ void			sub_buffers(void *dst, const void *b1, const void *b2, int nsamples, SrcT
 //encoder
 SVCContext		svc_enc_start(int w, int h, short nchannels, short depth, SrcType type, int fps_num, int fps_den)
 {
-	PROF_INIT();
 	if(w<=0||h<=0||nchannels<=0||depth<=0||type<SVC_UINT8||type>SVC_FLOAT32)
 	{
 		ERROR("Invalid encoder parameters");
@@ -141,12 +139,15 @@ SVCContext		svc_enc_start(int w, int h, short nchannels, short depth, SrcType ty
 		delete context, context=nullptr;
 		return nullptr;
 	}
+#ifdef SUBTRACT_PREV_FRAME
 	if(!context->prev_frame)
 	{
 		free(context->out_data);
 		delete context, context=nullptr;
 		return nullptr;
 	}
+#endif
+	PROF_INIT();//OpenCL initialization takes a long time
 	return context;
 }
 int				svc_enc_add_frame(SVCContext handle, const void *data)
@@ -160,19 +161,8 @@ int				svc_enc_add_frame(SVCContext handle, const void *data)
 	context=(SVCContextStruct*)handle;
 	++context->nframes;
 	int sample_size=1<<context->srctype;
-	//int sample_size=0;
-	//switch(context->srctype)
-	//{
-	//case SVC_UINT8:
-	//	sample_size=1;
-	//	break;
-	//case SVC_UINT16:
-	//	sample_size=2;
-	//	break;
-	//case SVC_FLOAT32:
-	//	sample_size=4;
-	//	break;
-	//}
+	const void *frame=nullptr;
+#ifdef SUBTRACT_PREV_FRAME
 	if(context->nframes==1)
 	{
 		memcpy(context->prev_frame, data, context->frame_bytesize);
@@ -180,28 +170,34 @@ int				svc_enc_add_frame(SVCContext handle, const void *data)
 	}
 	else
 		sub_buffers(context->prev_frame, data, context->prev_frame, context->frame_samples, context->srctype);
+	frame=context->prev_frame;
+#else
+	frame=data;
+#endif
 	PROF(DELTA);
 	auto s0=context->out_size;
 #ifdef ANS_CL
-	if(!ans9_encode(context->prev_frame, context->out_data, context->out_size, context->out_cap, &context->ans9_ctx, loud))
+	if(!ans9_encode(frame, context->out_data, context->out_size, context->out_cap, &context->ans9_ctx, loud))
 		return 0;
 #elif defined ABAC_CL
-	if(!abac9_encode(context->prev_frame, context->out_data, context->out_size, context->out_cap, &context->abac9_ctx, loud))
+	if(!abac9_encode(frame, context->out_data, context->out_size, context->out_cap, &context->abac9_ctx, loud))
 		return 0;
 #elif defined ANS_SSE2
-	if(!rans7_encode(context->prev_frame, context->frame_res, context->nchannels*sample_size, context->out_data, context->out_size, context->out_cap, loud))
+	if(!rans7_encode(frame, context->frame_res, context->nchannels*sample_size, context->out_data, context->out_size, context->out_cap, loud))
 		return 0;
 #elif defined ANS_64BIT
-	if(!rans6_encode(context->prev_frame, context->frame_res, context->nchannels*sample_size, context->out_data, context->out_size, context->out_cap, loud))
+	if(!rans6_encode(frame, context->frame_res, context->nchannels*sample_size, context->out_data, context->out_size, context->out_cap, loud))
 		return 0;
 #else
-	if(!rans4_encode(context->prev_frame, context->frame_res, context->nchannels*sample_size, context->out_data, context->out_size, context->out_cap, loud))
+	if(!rans4_encode(frame, context->frame_res, context->nchannels*sample_size, context->out_data, context->out_size, context->out_cap, loud))
 		return 0;
 #endif
 	//for(int k=0;k<context->nchannels;++k)
 	//	if(!abac4_encode((char*)context->prev_frame+k*sample_size, context->frame_res, context->depth, context->nchannels*sample_size, context->out_data, context->out_size, context->out_cap, loud))
 	//		return;
+#ifdef SUBTRACT_PREV_FRAME
 	memcpy(context->prev_frame, data, context->frame_bytesize);
+#endif
 	return (int)(context->out_size-s0);
 }
 unsigned char*	svc_enc_finish(SVCContext handle, unsigned long long *bytesize)
@@ -224,7 +220,6 @@ unsigned char*	svc_enc_finish(SVCContext handle, unsigned long long *bytesize)
 //decoder
 SVCContext		svc_dec_start(const unsigned char *data, unsigned long long bytesize)
 {
-	PROF_INIT();
 	if(!data||!bytesize)
 	{
 		ERROR("Invalid decoder parameters");
@@ -237,6 +232,7 @@ SVCContext		svc_dec_start(const unsigned char *data, unsigned long long bytesize
 		return nullptr;
 	}
 	context->in_idx=sizeof(SVCHeader);
+	PROF_INIT();
 	return context;
 }
 void			svc_dec_get_info(SVCContext handle, SVCHeader *info)
@@ -278,22 +274,11 @@ void			svc_dec_get_frame(SVCContext handle, void *data, const void *guide)
 		ERROR("Frame index = %d, but there are %d frames", context->frame_idx, context->nframes);
 		return;
 	}
+#ifndef ANS_CL
 	memset(data, 0, context->frame_bytesize);
+#endif
 
 	int sample_size=1<<context->srctype;
-	//int sample_size=0;
-	//switch(context->srctype)
-	//{
-	//case SVC_UINT8:
-	//	sample_size=1;
-	//	break;
-	//case SVC_UINT16:
-	//	sample_size=2;
-	//	break;
-	//case SVC_FLOAT32:
-	//	sample_size=4;
-	//	break;
-	//}
 	unsigned char *g2=nullptr;
 	if(guide)
 	{
@@ -352,6 +337,7 @@ void			svc_dec_get_frame(SVCContext handle, void *data, const void *guide)
 	//for(int k=0;k<context->nchannels;++k)
 	//	if(!abac4_decode(context->in_data, context->in_idx, context->in_size, (char*)data+k*sample_size, context->frame_res, context->depth, context->nchannels*sample_size, loud))
 	//		return;
+#ifdef SUBTRACT_PREV_FRAME
 	if(!context->frame_idx)
 	{
 		//TODO: unlift data
@@ -359,6 +345,7 @@ void			svc_dec_get_frame(SVCContext handle, void *data, const void *guide)
 	else
 		add_buffers(data, data, context->prev_frame, context->frame_samples, context->srctype);
 	memcpy(context->prev_frame, data, context->frame_bytesize);
+#endif
 	++context->frame_idx;
 	PROF(DELTA);
 }

@@ -18,7 +18,7 @@
 #ifndef PROFILER_H
 #define PROFILER_H
 
-//	#define	PROFILER
+	#define	PROFILER
 
 #ifdef PROFILER
 
@@ -31,18 +31,20 @@
 #define			PROF_STAGES\
 	PROF_LABEL(WASTE)\
 	\
+	PROF_LABEL(HISTOGRAM)\
+	PROF_LABEL(PREP)\
+	PROF_LABEL(SEND_FRAME)\
 	PROF_LABEL(INITIALIZE)\
 	PROF_LABEL(ENCODE)\
-	PROF_LABEL(ENCODE_PREP)\
+	PROF_LABEL(DECODE)\
 	PROF_LABEL(READ)\
 	PROF_LABEL(PACK)\
-	PROF_LABEL(DECODE)\
+	PROF_LABEL(DELTA)\
 	\
-	PROF_LABEL(PREP)\
+	PROF_LABEL(ENCODE_PREP)\
 	PROF_LABEL(FETCH)\
 	PROF_LABEL(RENORM)\
 	PROF_LABEL(UPDATE)\
-	PROF_LABEL(DELTA)\
 	\
 	PROF_LABEL(ENC_ANALYZE_PLANE)\
 	PROF_LABEL(ENC_BYPASS_PLANE)\
@@ -66,6 +68,7 @@ void			prof_end();
 #else
 
 #include		<stdio.h>
+#include		<string.h>
 const char		*prof_labels[]=
 {
 #define			PROF_LABEL(LABEL)	#LABEL,
@@ -75,18 +78,31 @@ const char		*prof_labels[]=
 long long		prof_cycles[PROF_COUNT]={}, prof_temp=0;
 void			prof_end()
 {
+	int pad=0;
+	for(int k=0;k<PROF_COUNT;++k)
+	{
+		int len=(int)strlen(prof_labels[k]);
+		if(pad<len)
+			pad=len;
+	}
+	//pad+=2;
+
 	long long sum=0;
 	for(int k=0;k<PROF_COUNT;++k)
 		sum+=prof_cycles[k];
-	printf("\nPROFILER\nLabel\tcycles\tpercentage\n");
+	printf("\nPROFILER\nLabel%*s\tcycles\t\tpercentage\n", pad-5);
 	for(int k=0;k<PROF_COUNT;++k)
-		printf("%s:\t%lld\t%.2lf%%\n", prof_labels[k], prof_cycles[k], 100.*prof_cycles[k]/sum);
+	{
+		int printed=printf("%s", prof_labels[k]);
+		printf("%*s\t%10lld\t%5.2lf%%\n", pad-printed, "", prof_cycles[k], 100.*prof_cycles[k]/sum);
+	}
+		//printf("%s:\t%lld\t%.2lf%%\n", prof_labels[k], prof_cycles[k], 100.*prof_cycles[k]/sum);
 	printf("\n");
 }
 
 #endif//PROFILER_IMPLEMENTATION
 #undef			PROF_STAGES
-#define			PROF_INIT()		prof_temp=__rdtsc()
+#define			PROF_INIT()		memset(prof_cycles, 0, PROF_COUNT*sizeof(long long)), prof_temp=__rdtsc()
 #define			PROF(LABEL)		prof_cycles[PROF_##LABEL]+=__rdtsc()-prof_temp, prof_temp=__rdtsc()
 
 #else
