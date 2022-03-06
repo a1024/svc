@@ -364,19 +364,80 @@ typedef struct
 //{
 //}
 
-//worksize = block_ycount*block_xcount*bytespersymbol
-__kernel void ans_enc2D32(__global unsigned char *src, __constant int *dim, __global SymbolInfo *in_stats, __global int *dst, __global int *sizes)
+//worksize = bytespersymbol*256
+__kernel void ans_enc_prep2(__global unsigned short *CDF, __constant int *dim, __global SymbolInfo *out_stats)
 {
-	int block_xcount=dim[DIM_BLOCK_XCOUNT],
+	int iw=dim[DIM_W0],
+		ih=dim[DIM_H0],
+		block_xcount=dim[DIM_BLOCK_XCOUNT],
 		block_ycount=dim[DIM_BLOCK_YCOUNT],
 		block_w=dim[DIM_BLOCK_W],
 		block_h=dim[DIM_BLOCK_H],
-		bytespersymbol=dim[DIM_BYTESPERSYMBOL],
-		nblocks=block_xcount*block_ycount, iw=block_xcount*block_w;
+		bytespersymbol=dim[DIM_BYTESPERSYMBOL];
+	int idx=get_global_id(0);
+	int symbol=idx&255, kc=idx>>8;
+	__global SymbolInfo *info=out_stats+idx;
+	int prev_CDF=0;
+	if(symbol>0)
+		prev_CDF=CDF[idx-1];
+	info->CDF=CDF[idx];
+	info->freq=info->CDF-prev_CDF;
+	info->cmpl_freq=~info->freq;
+	info->shift=0;//
+	info->reserved0=0;
+	info->inv_freq=0;//
+	info->bias=0;//
+	info->renorm_limit=info->freq<<(32-16);
+}
+
+//worksize = bytespersymbol*256
+__kernel void ans_dec_prep2(__global unsigned short *CDF, __constant int *dim, __global SymbolInfo *out_stats, __global unsigned char *in_CDF2sym)
+{
+	int iw=dim[DIM_W0],
+		ih=dim[DIM_H0],
+		block_xcount=dim[DIM_BLOCK_XCOUNT],
+		block_ycount=dim[DIM_BLOCK_YCOUNT],
+		block_w=dim[DIM_BLOCK_W],
+		block_h=dim[DIM_BLOCK_H],
+		bytespersymbol=dim[DIM_BYTESPERSYMBOL];
+	int idx=get_global_id(0);
+	int symbol=idx&255, kc=idx>>8;
+	__global SymbolInfo *info=out_stats+idx;
+	int prev_CDF=0;
+	if(symbol>0)
+		prev_CDF=CDF[idx-1];
+	info->CDF=CDF[idx];
+	info->freq=info->CDF-prev_CDF;
+	info->cmpl_freq=~info->freq;
+	info->shift=0;//
+	info->reserved0=0;
+	info->inv_freq=0;//
+	info->bias=0;//
+	info->renorm_limit=info->freq<<(32-16);
+
+	__global unsigned char *CDF2sym=in_CDF2sym+(kc<<16);
+	for(int k=prev_CDF;k<info->CDF;++k)//X slow
+		CDF2sym[k]=symbol;
+}
+
+//worksize = block_ycount*block_xcount*bytespersymbol
+__kernel void ans_enc2D32(__global unsigned char *src, __constant int *dim, __global SymbolInfo *in_stats, __global int *dst, __global int *sizes)
+{
+	int iw=dim[DIM_W0],
+		ih=dim[DIM_H0],
+		block_xcount=dim[DIM_BLOCK_XCOUNT],
+		block_ycount=dim[DIM_BLOCK_YCOUNT],
+		block_w=dim[DIM_BLOCK_W],
+		block_h=dim[DIM_BLOCK_H],
+		bytespersymbol=dim[DIM_BYTESPERSYMBOL];
 	int idx=get_global_id(0);
 	int kc=idx%bytespersymbol, kbx=idx/bytespersymbol%block_xcount, kby=idx/(bytespersymbol*block_xcount);
 	int y1=block_w*kby, y2=y1+block_w,
 		x1=block_h*kbx, x2=x1+block_h;
+	if(x2>=iw)
+		x2=iw-1;
+	if(y2>=ih)
+		y2=ih-1;
 	int block_idx=bytespersymbol*(block_xcount*kby+kbx)+kc;
 	__global unsigned short *cdata=(__global unsigned short*)(dst+(block_idx<<dim[DIM_LOGALLOCCOUNT]));
 	int bit_idx=0, bitsizelimit=1<<(dim[DIM_LOGALLOCCOUNT]+5);
@@ -384,15 +445,15 @@ __kernel void ans_enc2D32(__global unsigned char *src, __constant int *dim, __gl
 
 	__global SymbolInfo *stats=in_stats+(kc<<8);
 	unsigned state=0x10000;
-	//for(int k=0;k<bitsizelimit>>5;++k)//initialize cdata by calling zeromem()
-	//	cdata[k]=0;
+	int bypass=0;
+again:
 	for(int ky=y1;ky<y2;++ky)
 	{
 		int yoffset=iw*ky;
 		for(int kx=bytespersymbol*(yoffset+x1)+kc, xend=bytespersymbol*(yoffset+x2)+kc;kx<x2;kx+=bytespersymbol)
 		{
 			unsigned char symbol=src[kx];
-			__global SymbolInfo *info=stats+symbol;//fetch
+			__global SymbolInfo *info=stats+(symbol&-bypass);//fetch
 			if(state>info->renorm_limit)//renormalize
 			{
 				EMIT_UINT16((unsigned short)state);
@@ -403,7 +464,7 @@ __kernel void ans_enc2D32(__global unsigned char *src, __constant int *dim, __gl
 				state>>=16;
 			}
 			if(info->freq)//update
-				state=(state/info->freq<<16)+state%info->freq+info->CDF;
+				state=(state/info->freq<<16)+state%info->freq+(bypass?symbol<<8:info->CDF);
 		}
 	}
 	EMIT_UINT16((unsigned short)state);
@@ -412,30 +473,50 @@ __kernel void ans_enc2D32(__global unsigned char *src, __constant int *dim, __gl
 	if(ANS_PRINT_WRITES)
 		printf("kc %d finish %08X idx %d", kc, state, bit_idx);
 #endif
-	sizes[block_idx]=bit_idx>>4;
+	if(!bypass)
+	{
+		int size0=block_w*block_h<<3;
+		bypass=bit_idx>size0;
+		if(bypass)
+		{
+			bit_idx=0;
+			state=0x10000;
+			stats=in_stats+(bytespersymbol<<8);
+			goto again;
+		}
+		sizes[block_idx]=bit_idx>>4;
+	}
 #undef EMIT_UINT16
 }
 
-//worksize = block_ycount*block_xcount
-__kernel void ans_dec2D32(__global unsigned char *dst, __constant int *dim, __global SymbolInfo *in_stats, __global int *src, __global int *sizes, __constant unsigned char *in_CDF2sym)
+//worksize = block_ycount*block_xcount*bytespersymbol
+__kernel void ans_dec2D32(__global unsigned char *dst, __constant int *dim, __global SymbolInfo *in_stats, __global int *src, __global int *sizes, __global unsigned char *in_CDF2sym)
 {
-	int block_xcount=dim[DIM_BLOCK_XCOUNT],
+	int iw=dim[DIM_W0],
+		ih=dim[DIM_H0],
+		block_xcount=dim[DIM_BLOCK_XCOUNT],
 		block_ycount=dim[DIM_BLOCK_YCOUNT],
 		block_w=dim[DIM_BLOCK_W],
 		block_h=dim[DIM_BLOCK_H],
-		bytespersymbol=dim[DIM_BYTESPERSYMBOL],
-		nblocks=block_xcount*block_ycount, iw=block_xcount*block_w;
+		bytespersymbol=dim[DIM_BYTESPERSYMBOL];
 	int idx=get_global_id(0);
-	int kbx=idx%block_xcount, kby=idx/block_xcount;
+	int kc=idx%bytespersymbol, kbx=idx/bytespersymbol%block_xcount, kby=idx/(bytespersymbol*block_xcount);
 	int y1=block_w*kby, y2=y1+block_w,
 		x1=block_h*kbx, x2=x1+block_h;
-	int block_idx=bytespersymbol*(block_xcount*kby+kbx);
-	for(int kc=0;kc<32;++kc)
-	{
-		__global SymbolInfo *stats=in_stats+(kc<<8);
-		__constant unsigned char *CDF2sym=in_CDF2sym+(kc<<16);
-		int bit_idx=sizes[block_idx+kc]<<3;
-		unsigned state=0;
+	if(x2>=iw)
+		x2=iw-1;
+	if(y2>=ih)
+		y2=ih-1;
+	int bp_idx=bytespersymbol*(block_xcount*kby+kbx)+kc;
+	//for(int kc=0;kc<32;++kc)
+	//{
+	int bit_idx=sizes[bp_idx]<<3;
+	int bypass=bit_idx<0;
+	if(bypass)
+		bit_idx=-bit_idx;
+	__global SymbolInfo *stats=in_stats+((bypass?bytespersymbol:kc)<<8);
+	__global unsigned char *CDF2sym=in_CDF2sym+((bypass?bytespersymbol:kc)<<16);
+	unsigned state=0;
 #ifdef PRINT_READS
 #define READ_UINT16()		state=state<<16|(src[bit_idx>>5]>>(bit_idx&31)&0xFF), bit_idx+=16;	\
 	if(PRINT_READS)	\
@@ -446,48 +527,49 @@ __kernel void ans_dec2D32(__global unsigned char *dst, __constant int *dim, __gl
 #else
 #define READ_UINT16()		state=state<<16|(src[bit_idx>>5]>>(bit_idx&31)&0xFFFF), bit_idx+=16
 #endif
-		READ_UINT16();
-		READ_UINT16();
+	READ_UINT16();
+	READ_UINT16();
 #ifdef ANS_PRINT_READS
-		if(ANS_PRINT_READS)
-			printf("read x %08X idx %d", state, bit_idx);
+	if(ANS_PRINT_READS)
+		printf("read x %08X idx %d", state, bit_idx);
 #endif
-		if(bit_idx<0)//decode bypass
+	//if(bit_idx<0)//decode bypass
+	//{
+	//	bit_idx=-bit_idx;
+	//	for(int ky=y1;ky<y2;++ky)
+	//	{
+	//		int yoffset=iw*ky;
+	//		for(int kx=bytespersymbol*(yoffset+x1)+kc, xend=bytespersymbol*(yoffset+x2)+kc;kx<x2;kx+=bytespersymbol)
+	//		{
+	//			dst[kx]=src[bit_idx>>5]>>(bit_idx&31);
+	//			bit_idx+=8;
+	//		}
+	//	}
+	//}
+	//else
+	//{
+	for(int ky=y1;ky<y2;++ky)
+	{
+		int yoffset=iw*ky;
+		for(int kx=bytespersymbol*(yoffset+x1)+kc, xend=bytespersymbol*(yoffset+x2)+kc;kx<x2;kx+=bytespersymbol)
 		{
-			bit_idx=-bit_idx;
-			for(int ky=y1;ky<y2;++ky)
+			unsigned short c=(unsigned short)state;
+			unsigned char symbol=CDF2sym[c];
+			dst[kx]=symbol;
+			__global SymbolInfo *info=stats+(symbol&-bypass);
+			state=info->freq*(state>>16)+c-(bypass?symbol<<8:info->CDF);
+			if(state<0x10000)
 			{
-				int yoffset=iw*ky;
-				for(int kx=bytespersymbol*(yoffset+x1)+kc, xend=bytespersymbol*(yoffset+x2)+kc;kx<x2;kx+=bytespersymbol)
-				{
-					dst[kx]=src[bit_idx>>5]>>(bit_idx&31);
-					bit_idx+=8;
-				}
+				READ_UINT16();
+#ifdef ANS_PRINT_READS
+				if(ANS_PRINT_READS)
+					printf("kc %d (%d,%d) read x %08X idx %d", kc, kx, ky, state, bit_idx);
+#endif
 			}
 		}
-		else
-		{
-			for(int ky=y1;ky<y2;++ky)
-			{
-				int yoffset=iw*ky;
-				for(int kx=bytespersymbol*(yoffset+x1)+kc, xend=bytespersymbol*(yoffset+x2)+kc;kx<x2;kx+=bytespersymbol)
-				{
-					unsigned short c=(unsigned short)state;
-					unsigned char symbol=CDF2sym[c];
-					dst[kx]=symbol;
-					__global SymbolInfo *info=stats+symbol;
-					state=info->freq*(state>>16)+c-info->CDF;
-					if(state<0x10000)
-					{
-						READ_UINT16();
-#ifdef ANS_PRINT_READS
-						if(ANS_PRINT_READS)
-							printf("kc %d (%d,%d) read x %08X idx %d", kc, kx, ky, state, bit_idx);
-#endif
-					}
-				}
-			}
-		}
-#undef READ_UINT16
 	}
+	//}
+#undef READ_UINT16
+	//}
 }
+

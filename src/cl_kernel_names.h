@@ -9,6 +9,8 @@ CLFUNC(abac_enc2D32_prep, 3)
 CLFUNC(abac_enc2D32, 5)
 CLFUNC(abac_dec2D32, 5)
 
+CLFUNC(ans_enc_prep2, 4)
+CLFUNC(ans_dec_prep2, 4)
 CLFUNC(ans_enc2D32, 5)
 CLFUNC(ans_dec2D32, 6)
 

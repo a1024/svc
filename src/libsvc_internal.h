@@ -173,8 +173,9 @@ struct			ANS9Context//32bit depth
 	unsigned char *CDF2sym;
 
 	CLBuffer
+	//	buf_CDF0,
 		buf_image0,
-		buf_image_p,//if image_p==nullptr: use image0 as it doesn't need padding
+	//	buf_image_p,//if image_p==nullptr: use image0 as it doesn't need padding
 		buf_dim,
 		buf_stats,
 		buf_cdata,

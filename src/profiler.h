@@ -33,7 +33,6 @@
 	\
 	PROF_LABEL(HISTOGRAM)\
 	PROF_LABEL(PREP)\
-	PROF_LABEL(SEND_FRAME)\
 	PROF_LABEL(INITIALIZE)\
 	PROF_LABEL(ENCODE)\
 	PROF_LABEL(DECODE)\
@@ -41,6 +40,7 @@
 	PROF_LABEL(PACK)\
 	PROF_LABEL(DELTA)\
 	\
+	PROF_LABEL(SEND_FRAME)\
 	PROF_LABEL(ENCODE_PREP)\
 	PROF_LABEL(FETCH)\
 	PROF_LABEL(RENORM)\
@@ -90,7 +90,7 @@ void			prof_end()
 	long long sum=0;
 	for(int k=0;k<PROF_COUNT;++k)
 		sum+=prof_cycles[k];
-	printf("\nPROFILER\nLabel%*s\tcycles\t\tpercentage\n", pad-5);
+	printf("\nPROFILER\nLabel%*s\tcycles\t\tpercentage\n", pad-5, "");
 	for(int k=0;k<PROF_COUNT;++k)
 	{
 		int printed=printf("%s", prof_labels[k]);

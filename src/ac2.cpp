@@ -570,7 +570,7 @@ struct			SortedHistInfo
 		qfreq;//quantized freq
 	SortedHistInfo():idx(0), freq(0), qfreq(0){}
 };
-int				ans_calc_histogram(const unsigned char *buffer, int nsymbols, int bytestride, unsigned short *histogram, int prob_bits)
+int				ans_calc_histogram(const unsigned char *buffer, int nsymbols, int bytestride, unsigned short *histogram, int prob_bits, int integrate)
 {
 	int prob_sum=1<<prob_bits;
 	//MY_ASSERT(ANS_NLEVELS<prob_sum, "Channel depth %d >= PROB_BITS %d", ANS_NLEVELS, prob_sum);//what if ANS_NLEVELS = 2^N-1 ?
@@ -637,12 +637,16 @@ int				ans_calc_histogram(const unsigned char *buffer, int nsymbols, int bytestr
 			return a.idx<b.idx;
 		});
 	}
+	int sum=0;
 	for(int k=0;k<ANS_NLEVELS;++k)
 	{
 		if(h[k].qfreq>0xFFFF)
 			FAIL("Internal error: symbol %d has probability %d", k, h[k].qfreq);
-		histogram[k]=h[k].qfreq;
+		histogram[k]=integrate?sum:h[k].qfreq;
+		sum+=h[k].qfreq;
 	}
+	if(sum!=ANS_L)
+		FAIL("Internal error: CDF ends with 0x%08X, should end with 0x%08X", sum, ANS_L);
 	return true;
 }
 bool			rans4_prep(const void *hist_ptr, int bytespersymbol, SymbolInfo *&info, unsigned char *&CDF2sym, int loud)
@@ -839,7 +843,7 @@ int				rans4_encode(const void *src, int nsymbols, int bytespersymbol, unsigned 
 	auto temp=dst_start;
 	store_int_le(dst, temp, magic_ac05);
 	for(int kc=0;kc<bytespersymbol;++kc)
-		if(!ans_calc_histogram(buffer+kc, nsymbols, bytespersymbol, (unsigned short*)(dst+dst_start+8+kc*(ANS_NLEVELS*sizeof(short))), 16))
+		if(!ans_calc_histogram(buffer+kc, nsymbols, bytespersymbol, (unsigned short*)(dst+dst_start+8+kc*(ANS_NLEVELS*sizeof(short))), 16, false))
 			return false;
 
 	//printf("idx = %lld\n", dst_start+8);//
@@ -1053,7 +1057,7 @@ int				rans6_encode(const void *src, int nsymbols, int bytespersymbol, unsigned 
 	auto temp=dst_start;
 	store_int_le(dst, temp, magic_ac06);
 	for(int kc=0;kc<bytespersymbol;++kc)
-		if(!ans_calc_histogram(buffer+kc, nsymbols, bytespersymbol, (unsigned short*)(dst+dst_start+8+kc*(ANS_NLEVELS*sizeof(short))), 16))
+		if(!ans_calc_histogram(buffer+kc, nsymbols, bytespersymbol, (unsigned short*)(dst+dst_start+8+kc*(ANS_NLEVELS*sizeof(short))), 16, false))
 			return false;
 
 	//printf("idx = %lld\n", dst_start+8);//
@@ -1244,7 +1248,7 @@ int				rans7_encode(const void *src, int nsymbols, int bytespersymbol, unsigned 
 	auto temp=dst_start;
 	store_int_le(dst, temp, magic_ac07);
 	for(int kc=0;kc<bytespersymbol;++kc)
-		if(!ans_calc_histogram(buffer+kc, nsymbols, bytespersymbol, (unsigned short*)(dst+dst_start+8+kc*(ANS_NLEVELS*sizeof(short))), ANS7_PROB_BITS))
+		if(!ans_calc_histogram(buffer+kc, nsymbols, bytespersymbol, (unsigned short*)(dst+dst_start+8+kc*(ANS_NLEVELS*sizeof(short))), ANS7_PROB_BITS, false))
 			return false;
 	return false;//TODO
 }
@@ -1682,7 +1686,8 @@ int				ans9_prep(int iw, int ih, int block_w, int block_h, int bytespersymbol, i
 	ctx->blockplanecount=blockcount*bytespersymbol;
 	ctx->logalloccount=floor_log2(blocksize/4*ABAC9_ALLOWANCE);//allowance to encode blocksize bytes
 	ctx->alloccount=ctx->blockplanecount<<ctx->logalloccount;
-	ctx->statscount=bytespersymbol*256*sizeof(SymbolInfo)/sizeof(int);
+	ctx->statscount=(ctx->bytespersymbol*256+1)*sizeof(SymbolInfo)/sizeof(int);
+	//ctx->statscount=(bytespersymbol+1)*256*sizeof(SymbolInfo)/sizeof(int);
 	
 	ctx->symbolinfo=(SymbolInfo*)malloc(ctx->statscount*sizeof(int));
 	ctx->receiver_sizes=(int*)malloc(ctx->blockplanecount*sizeof(int));
@@ -1694,19 +1699,23 @@ int				ans9_prep(int iw, int ih, int block_w, int block_h, int bytespersymbol, i
 	else
 	{
 		ctx->receiver_cdata=nullptr;
-		ctx->CDF2sym=(unsigned char*)malloc(bytespersymbol<<16);
+		ctx->CDF2sym=(unsigned char*)malloc((bytespersymbol+1)<<16);
 	}
 
+	//ctx->buf_CDF0.create(bytespersymbol<<8, BUFFER_READ_WRITE);
 	ctx->buf_image0.create(ctx->iw*ctx->ih, BUFFER_READ_WRITE);
-	if(iw!=ctx->padded_w||ih!=ctx->padded_h)
-		ctx->buf_image_p.create(ctx->paddedcount, BUFFER_READ_WRITE);
-	else
-		ctx->buf_image_p.handle=nullptr;
+	//if(iw!=ctx->padded_w||ih!=ctx->padded_h)
+	//	ctx->buf_image_p.create(ctx->paddedcount, BUFFER_READ_WRITE);
+	//else
+	//	ctx->buf_image_p.handle=nullptr;
 	ctx->buf_dim.create(DIM_VAL_COUNT, BUFFER_READ_ONLY);
 	ctx->buf_stats.create(ctx->statscount, BUFFER_READ_WRITE);
 	ctx->buf_cdata.create(ctx->alloccount, BUFFER_READ_WRITE);
 	ctx->buf_sizes.create(ctx->blockplanecount, BUFFER_READ_WRITE);
-	ctx->buf_CDF2sym.create((bytespersymbol<<16)/sizeof(int), BUFFER_READ_ONLY);
+	if(encode)
+		ctx->buf_CDF2sym.handle=nullptr;
+	else
+		ctx->buf_CDF2sym.create(((bytespersymbol+1)<<16)/sizeof(int), BUFFER_READ_WRITE);
 	
 	int shift=floor_log2(blocksize)-2;
 	if(shift<0)
@@ -1739,7 +1748,7 @@ bool			ans9_prep2(const void *hist_ptr, int bytespersymbol, SymbolInfo *info, un
 	//if(!info)
 	//	FAIL("Failed to allocate temp buffer");
 	//CDF2sym=(unsigned char*)info+bytespersymbol*ANS_NLEVELS*sizeof(SymbolInfo);
-	for(int kc=0;kc<bytespersymbol;++kc)
+	for(int kc=0;kc<bytespersymbol+1;++kc)
 	{
 		auto c_histogram=(const unsigned short*)hist_ptr+(kc<<ANS_DEPTH);
 		auto c_info=info+(kc<<ANS_DEPTH);
@@ -1748,7 +1757,7 @@ bool			ans9_prep2(const void *hist_ptr, int bytespersymbol, SymbolInfo *info, un
 		for(int k=0;k<ANS_NLEVELS;++k)
 		{
 			auto &si=c_info[k];
-			si.freq=c_histogram[k];
+			si.freq=kc<bytespersymbol?c_histogram[k]:0x10000/ANS_NLEVELS;
 			si.cmpl_freq=~si.freq;
 			si.CDF=sum;
 			si.reserved0=0;
@@ -1761,8 +1770,8 @@ bool			ans9_prep2(const void *hist_ptr, int bytespersymbol, SymbolInfo *info, un
 			}
 			else
 			{
-				si.shift=ceil_log2(c_histogram[k])-1;
-				si.inv_freq=(unsigned)(((0x100000000<<si.shift)+c_histogram[k]-1)/c_histogram[k]);
+				si.shift=ceil_log2(si.freq)-1;
+				si.inv_freq=(unsigned)(((0x100000000<<si.shift)+si.freq-1)/si.freq);
 				si.bias=si.CDF;
 			}
 
@@ -1771,7 +1780,7 @@ bool			ans9_prep2(const void *hist_ptr, int bytespersymbol, SymbolInfo *info, un
 			if(CDF2sym&&k)
 			{
 				int dstsize=si.CDF-c_info[k-1].CDF;
-				if(dstsize)
+				if(dstsize>0)
 					memset(c_CDF2sym+c_info[k-1].CDF, k-1, dstsize);
 
 				//int src=k-1;
@@ -1780,17 +1789,19 @@ bool			ans9_prep2(const void *hist_ptr, int bytespersymbol, SymbolInfo *info, un
 				//for(int k2=c_info[k-1].CDF;k2<(int)si.CDF;++k2)
 				//	c_CDF2sym[k2]=k-1;
 			}
+			if(kc>=bytespersymbol)
+				break;
 			sum+=si.freq;
 		}
-		if(CDF2sym)
+		if(kc<bytespersymbol&&CDF2sym)
 		{
 			int dstsize=ANS_L-c_info[ANS_NLEVELS-1].CDF;
-			if(dstsize)
+			if(dstsize>0)
 				memset(c_CDF2sym+c_info[ANS_NLEVELS-1].CDF, ANS_NLEVELS-1, dstsize);
 			//for(int k2=c_info[ANS_NLEVELS-1].CDF;k2<ANS_L;++k2)
 			//	c_CDF2sym[k2]=ANS_NLEVELS-1;
 		}
-		if(sum!=ANS_L)
+		if(kc<bytespersymbol&&sum!=ANS_L)
 			FAIL("histogram sum = %d != %d", sum, ANS_L);
 		if(loud)
 		{
@@ -1825,29 +1836,37 @@ int				ans9_encode(const void *src, unsigned char *&dst, unsigned long long &dst
 	store_int_le(dst, dst_s2, magic_an09);
 	auto buffer=(const unsigned char*)src;
 	for(int kc=0;kc<ctx->bytespersymbol;++kc)
-		if(!ans_calc_histogram(buffer+kc, ctx->block_w*ctx->block_h, ctx->bytespersymbol, (unsigned short*)(dst+dst_s2+kc*(ANS_NLEVELS*sizeof(short))), 16))
+		if(!ans_calc_histogram(buffer+kc, ctx->block_w*ctx->block_h, ctx->bytespersymbol, (unsigned short*)(dst+dst_s2+kc*(ANS_NLEVELS*sizeof(short))), 16, false))
 			return false;
 	PROF(HISTOGRAM);
 	if(!ans9_prep2(dst+dst_s2, ctx->bytespersymbol, ctx->symbolinfo, ctx->CDF2sym, loud))
 		return false;
+	//ctx->buf_CDF0.write(dst+dst_s2);
+	//ocl_sync();
 	dst_s2=dst_size+sizes_offset;
 	dst_size+=headersize;
 	PROF(PREP);
 	
-	CLBuffer args[5]={}, padded_image=nullptr;
+	CLBuffer args[5]={};
+	//args[0]=ctx->buf_CDF0;
+	//args[1]=ctx->buf_dim;
+	//args[2]=ctx->buf_stats;
+	//ocl_call_kernel(OCL_ans_enc_prep2, ctx->bytespersymbol<<8, args, 3);
 	ctx->buf_image0.write(src);
-	if(ctx->buf_image_p.handle)
-	{
-		ocl_sync();
-		PROF(SEND_FRAME);
-		args[0]=ctx->buf_image0;
-		args[1]=ctx->buf_image_p;
-		args[2]=ctx->buf_dim;
-		ocl_call_kernel(OCL_pad_const, ctx->padded_w*ctx->padded_h, args, 3);
-		padded_image=ctx->buf_image_p;
-	}
-	else
-		padded_image=ctx->buf_image0;
+
+	//if(ctx->buf_image_p.handle)
+	//{
+	//	ocl_sync();
+	//	PROF(SEND_FRAME);
+	//	args[0]=ctx->buf_image0;
+	//	args[1]=ctx->buf_image_p;
+	//	args[2]=ctx->buf_dim;
+	//	ocl_call_kernel(OCL_pad_const, ctx->padded_w*ctx->padded_h, args, 3);
+	//	padded_image=ctx->buf_image_p;
+	//}
+	//else
+	//	padded_image=ctx->buf_image0;
+	//ctx->buf_stats.write_sub(ctx->symbolinfo, 0, (ctx->bytespersymbol*256+1)*sizeof(SymbolInfo)/sizeof(int));
 	ctx->buf_stats.write(ctx->symbolinfo);
 	//ocl_call_kernel(OCL_zeromem, ctx->alloccount, &ctx->buf_cdata, 1);
 	ocl_sync();
@@ -1859,7 +1878,7 @@ int				ans9_encode(const void *src, unsigned char *&dst, unsigned long long &dst
 	//printf("GPU dim:\n");//
 	//print_clmem_as_ints(ctx->buf_stats);//
 
-	args[0]=padded_image;
+	args[0]=ctx->buf_image0;
 	args[1]=ctx->buf_dim;
 	args[2]=ctx->buf_stats;
 	args[3]=ctx->buf_cdata;
@@ -1968,7 +1987,9 @@ int				ans9_decode(const unsigned char *src, unsigned long long &src_idx, unsign
 		headersize=sizes_offset+ctx->blockplanecount*sizeof(short);
 	auto src_sizes=(const unsigned short*)(src+src_idx+sizes_offset);
 	auto src_cdata=src+src_idx+headersize;
-
+	
+	//ctx->buf_CDF0.write(src+src_idx+4);
+	//ocl_sync();
 	int bypass_size=ctx->block_w*ctx->block_h;
 	int byteoffset=0;
 	for(int k=0;k<ctx->blockplanecount;++k)
@@ -1988,8 +2009,15 @@ int				ans9_decode(const unsigned char *src, unsigned long long &src_idx, unsign
 	int icount=(byteoffset+3)>>2;
 	PROF(PREP);
 	
-	CLBuffer padded_image=ctx->buf_image_p.handle?ctx->buf_image_p:ctx->buf_image0;
+	CLBuffer args[6]={};
+	//args[0]=ctx->buf_CDF0;
+	//args[1]=ctx->buf_dim;
+	//args[2]=ctx->buf_stats;
+	//args[3]=ctx->buf_CDF2sym;
+	//ocl_call_kernel(OCL_ans_dec_prep2, ctx->bytespersymbol<<8, args, 4);
+	//CLBuffer padded_image=ctx->buf_image_p.handle?ctx->buf_image_p:ctx->buf_image0;
 	//ocl_call_kernel(OCL_zeromem, ctx->iw*ctx->ih, &padded_image, 1);//no need
+	//ctx->buf_stats.write_sub(ctx->symbolinfo, 0, (ctx->bytespersymbol*256+1)*sizeof(SymbolInfo)/sizeof(int));
 	ctx->buf_stats.write(ctx->symbolinfo);
 	ctx->buf_cdata.write_sub(src_cdata, 0, icount);
 	ctx->buf_sizes.write(ctx->receiver_sizes);
@@ -1999,27 +2027,27 @@ int				ans9_decode(const unsigned char *src, unsigned long long &src_idx, unsign
 	//print_clmem_as_bytes(ctx->buf_cdata, icount, 0);//yes
 	PROF(INITIALIZE);
 
-	CLBuffer args[6]={};
-	args[0]=padded_image;
+	args[0]=ctx->buf_image0;
 	args[1]=ctx->buf_dim;
 	args[2]=ctx->buf_stats;
 	args[3]=ctx->buf_cdata;
 	args[4]=ctx->buf_sizes;
 	args[5]=ctx->buf_CDF2sym;
-	ocl_call_kernel(OCL_ans_dec2D32, ctx->block_xcount*ctx->block_ycount, args, 6);
+	ocl_call_kernel(OCL_ans_dec2D32, ctx->block_xcount*ctx->block_ycount*ctx->bytespersymbol, args, 6);//13.25 GB/s
+	//ocl_call_kernel(OCL_ans_dec2D32, ctx->block_xcount*ctx->block_ycount, args, 6);//7.08 GB/s
 	ocl_sync();
 	PROF(DECODE);
 
-	if(ctx->buf_image_p.handle)
-	{
-		args[0]=ctx->buf_image0;
-		args[1]=ctx->buf_image_p;
-		args[2]=ctx->buf_dim;
-		ocl_call_kernel(OCL_unpad, ctx->iw*ctx->ih, args, 3);
-#ifdef ANS_CL_EMUATE_RENDER2GLTEXTURE
-		ocl_sync();
-#endif
-	}
+//	if(ctx->buf_image_p.handle)
+//	{
+//		args[0]=ctx->buf_image0;
+//		args[1]=ctx->buf_image_p;
+//		args[2]=ctx->buf_dim;
+//		ocl_call_kernel(OCL_unpad, ctx->iw*ctx->ih, args, 3);
+//#ifdef ANS_CL_EMUATE_RENDER2GLTEXTURE
+//		ocl_sync();
+//#endif
+//	}
 #ifndef ANS_CL_EMUATE_RENDER2GLTEXTURE
 	ctx->buf_image0.read(dst);
 #endif
