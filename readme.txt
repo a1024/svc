@@ -6,7 +6,12 @@ Make a solution with two projects:
 - svc.exe containing: lodepng.cpp, main.cpp
 
 Benchmark
-Using ANS on OpenCL-GPU:
+ANS on CPU:
+- Subtract prev frame:
+	Encode: 61.75 MB/s
+	Decode: 122.00 MB/s
+
+ANS on OpenCL-GPU:
 - Subtract prev frame:
 	Encode: 589.69 MB/s
 	Decode: 697.85 MB/s
