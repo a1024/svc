@@ -105,7 +105,10 @@ enum			DimInfo
 };
 
 //OpenCL ABAC - 32-bit
-const int		abac9_block_w=16, abac9_block_h=16;
+//const int		abac9_block_w=8, abac9_block_h=8;	//308.87 MB/s	3127.08 MB/s	6994.14 MB/s	10.638579
+//const int		abac9_block_w=16, abac9_block_h=16;	//332.08 MB/s	3547.39 MB/s	9523.92 MB/s	41.913559
+//const int		abac9_block_w=32, abac9_block_h=32;	//302.60 MB/s	3031.44 MB/s	6364.22 MB/s	162.593849
+const int		abac9_block_w=64, abac9_block_h=64;	//274.04 MB/s	1629.74 MB/s	2307.20 MB/s	580.312041
 struct			ABAC9Context//32bit depth
 {
 	int iw, ih,//original image dimensions

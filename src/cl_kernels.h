@@ -485,7 +485,7 @@ again:
 			if(ANS_PRINT_STATE)
 				printf("kc %d (%d,%d) x %08X s %02X freq %04X CDF %04X lim %08X idx %d", kc, kx, ky, state, symbol, info->freq, (bypass_mask&symbol<<8|info->CDF), info->renorm_limit, u16_idx);
 #endif
-			if(info->freq)
+		//	if(info->freq)
 			{
 				if(state>=info->renorm_limit)//renormalize
 				{
@@ -551,8 +551,6 @@ __kernel void ans_dec2D32(__global unsigned char *dst, __constant int *dim, __gl
 	if(y2>ih)
 		y2=ih;
 	int bp_idx=bytespersymbol*(block_xcount*kby+kbx)+kc;
-	//for(int kc=0;kc<32;++kc)
-	//{
 	int u16_idx=sizes[bp_idx];
 #ifdef ANS_DEC_GUARD
 	int u16_start=bp_idx?sizes[bp_idx-1]:0;
@@ -576,21 +574,6 @@ __kernel void ans_dec2D32(__global unsigned char *dst, __constant int *dim, __gl
 	if(ANS_PRINT_READS)
 		printf("read x %08X idx %d", state, u16_idx);
 #endif
-	//if(bit_idx<0)//decode bypass
-	//{
-	//	bit_idx=-bit_idx;
-	//	for(int ky=y1;ky<y2;++ky)
-	//	{
-	//		int yoffset=iw*ky;
-	//		for(int kx=bytespersymbol*(yoffset+x1)+kc, xend=bytespersymbol*(yoffset+x2)+kc;kx<x2;kx+=bytespersymbol)
-	//		{
-	//			dst[kx]=src[bit_idx>>5]>>(bit_idx&31);
-	//			bit_idx+=8;
-	//		}
-	//	}
-	//}
-	//else
-	//{
 	for(int ky=y2-1;ky>=y1;--ky)
 	{
 		int yoffset=iw*ky;
@@ -610,7 +593,7 @@ __kernel void ans_dec2D32(__global unsigned char *dst, __constant int *dim, __gl
 			if(ANS_PRINT_STATE)
 				printf("kc %d (%d,%d) x %08X s %02X freq %04X CDF %04X idx %d", kc, kx, ky, state, symbol, info->freq, (bypass_mask&symbol<<8|info->CDF), u16_idx);
 #endif
-			if(info->freq)
+		//	if(info->freq)
 				state=info->freq*(state>>16)+c-(bypass_mask&symbol<<8|info->CDF);
 #ifdef ANS_PRINT_WARNINGS
 			else if(ANS_PRINT_WARNINGS)
@@ -629,7 +612,5 @@ __kernel void ans_dec2D32(__global unsigned char *dst, __constant int *dim, __gl
 #endif
 		}
 	}
-	//}
 #undef READ_UINT16
-	//}
 }
