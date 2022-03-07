@@ -583,9 +583,11 @@ int				ans_calc_histogram(const unsigned char *buffer, int nsymbols, int bytestr
 	for(int k=0;k<ANS_NLEVELS;++k)
 		h[k].idx=k;
 	int bytesize=nsymbols*bytestride;
-	for(int k=0;k<bytesize;k+=bytestride)
+	PROF(HISTOGRAM_INIT);
+	for(int k=0;k<bytesize;k+=bytestride)//this loop takes 73% of encode time
 		++h[buffer[k]].freq;
 	//	++h[buffer[k]>>bit0&mask].freq;
+	PROF(HISTOGRAM_LOOKUP);
 	if(nsymbols!=prob_sum)
 	{
 		const int prob_max=prob_sum-1;
@@ -1684,7 +1686,7 @@ int				ans9_prep(int iw, int ih, int block_w, int block_h, int bytespersymbol, i
 		blockcount=ctx->block_xcount*ctx->block_ycount;
 	ctx->paddedcount=blocksize*blockcount;
 	ctx->blockplanecount=blockcount*bytespersymbol;
-	ctx->logalloccount=floor_log2(blocksize/4*ABAC9_ALLOWANCE);//allowance to encode blocksize bytes
+	ctx->logalloccount=floor_log2(blocksize/sizeof(int)*2);//log2 of icount of buffer allocated for compressed blockplane
 	ctx->alloccount=ctx->blockplanecount<<ctx->logalloccount;
 	ctx->statscount=(ctx->bytespersymbol*256+1)*sizeof(SymbolInfo)/sizeof(int);
 	//ctx->statscount=(bytespersymbol+1)*256*sizeof(SymbolInfo)/sizeof(int);
@@ -1720,7 +1722,7 @@ int				ans9_prep(int iw, int ih, int block_w, int block_h, int bytespersymbol, i
 	int shift=floor_log2(blocksize)-2;
 	if(shift<0)
 		shift=0;
-	int dim[]=
+	int dim[DIM_VAL_COUNT]=
 	{
 		ctx->iw,
 		ctx->ih,
@@ -1838,7 +1840,7 @@ int				ans9_encode(const void *src, unsigned char *&dst, unsigned long long &dst
 	store_int_le(dst, dst_s2, magic_an09);
 	auto buffer=(const unsigned char*)src;
 	for(int kc=0;kc<ctx->bytespersymbol;++kc)
-		if(!ans_calc_histogram(buffer+kc, ctx->block_w*ctx->block_h, ctx->bytespersymbol, (unsigned short*)(dst+dst_s2+kc*(ANS_NLEVELS*sizeof(short))), 16, false))
+		if(!ans_calc_histogram(buffer+kc, ctx->iw*ctx->ih, ctx->bytespersymbol, (unsigned short*)(dst+dst_s2+kc*(ANS_NLEVELS*sizeof(short))), 16, false))
 			return false;
 	PROF(HISTOGRAM);
 	if(!ans9_prep2(dst+dst_s2, ctx->bytespersymbol, ctx->symbolinfo, ctx->CDF2sym, loud))
@@ -1900,19 +1902,24 @@ int				ans9_encode(const void *src, unsigned char *&dst, unsigned long long &dst
 	//print_clmem_as_ints(ctx->buf_cdata);//
 
 	int logallocbytes=ctx->logalloccount+floor_log2(sizeof(int));
-	int bypass_size=ctx->block_w*ctx->block_h;
-	for(int k=0;k<ctx->blockplanecount;++k)
+	//int bypass_size=ctx->block_w*ctx->block_h;
+	int bypass_count=0;
+	for(int k=0;k<ctx->blockplanecount;++k)//pack
 	{
-		if(ctx->receiver_sizes[k]<bypass_size)
+		bypass_count+=ctx->receiver_sizes[k]<0;
+		int bytesize=abs(ctx->receiver_sizes[k])*sizeof(short);
+		emit_pad_uninitialized(dst, dst_size, dst_cap, bytesize);
+		memcpy(dst+dst_size, ctx->receiver_cdata+(k<<logallocbytes), bytesize);
+		dst_size+=bytesize;
+	/*	if(bytesize<bypass_size)
 		{
-			int bytesize=ctx->receiver_sizes[k]*sizeof(short);
 			emit_pad_uninitialized(dst, dst_size, dst_cap, bytesize);
 			memcpy(dst+dst_size, ctx->receiver_cdata+(k<<logallocbytes), bytesize);
 			dst_size+=bytesize;
 		}
-		else//bypass
+		else//bypass on CPU?
 		{
-			pause();
+			++bypass_count;
 			int kp=k&31, kbx=(k>>5)%ctx->block_xcount, kby=(k>>5)/ctx->block_xcount;
 			int y1=ctx->block_ycount*kby, y2=y1+ctx->block_ycount,
 				x1=ctx->block_xcount*kbx, x2=x1+ctx->block_xcount;
@@ -1931,22 +1938,14 @@ int				ans9_encode(const void *src, unsigned char *&dst, unsigned long long &dst
 				}
 			}
 			dst_size+=bypass_size;
-		}
+		}//*/
 	}
 	int csizes[16]={};//bytespersymbol <= 16
 	auto dst_sizes=(unsigned short*)(dst+dst_s2);
 	for(int k=0;k<ctx->blockplanecount;++k)
 	{
-		if(ctx->receiver_sizes[k]<bypass_size)
-		{
-			dst_sizes[k]=ctx->receiver_sizes[k];//short-count
-			csizes[k%ctx->bytespersymbol]+=ctx->receiver_sizes[k];
-		}
-		else
-		{
-			dst_sizes[k]=0x8000;//bypass
-			csizes[k%ctx->bytespersymbol]+=bypass_size;
-		}
+		dst_sizes[k]=ctx->receiver_sizes[k];//short-count, -ve means bypass statistics were used
+		csizes[k%ctx->bytespersymbol]+=abs(ctx->receiver_sizes[k])*sizeof(short);
 	}
 	auto t2=__rdtsc();
 	PROF(PACK);
@@ -1955,11 +1954,11 @@ int				ans9_encode(const void *src, unsigned char *&dst, unsigned long long &dst
 		int imsize=ctx->iw*ctx->ih;
 		int original_bitsize=imsize*ctx->bytespersymbol<<3, compressed_bitsize=(int)(dst_size-dst_start)<<3;
 		printf("ANS_CL encode:  %lld cycles, %lf c/byte\n", t2-t1, (double)(t2-t1)/(original_bitsize>>3));
-		printf("Size: %d -> %d bytes, ratio: %lf, %lf bpp\n", original_bitsize>>3, compressed_bitsize>>3, (double)original_bitsize/compressed_bitsize, (double)compressed_bitsize/imsize);
+		printf("Size: %d -> %d bytes, ratio: %lf, %lf bpp, bypass %d/%d\n", original_bitsize>>3, compressed_bitsize>>3, (double)original_bitsize/compressed_bitsize, (double)compressed_bitsize/imsize, bypass_count, ctx->blockplanecount);
 
-		printf("Ch\tsize\tratio,\tbytes/bitplane = %d\n", imsize>>3);
+		printf("Ch\tsize\tratio,\tbytes/channel = %d\n", imsize);
 		for(int k=0;k<ctx->bytespersymbol;++k)
-			printf("%2d\t%5d\t%lf\n", k, csizes[k], (double)imsize/(csizes[k]<<3));
+			printf("%2d\t%5d\t%lf\n", k, csizes[k], (double)imsize/csizes[k]);
 		
 		printf("Preview:\n");
 		int kprint=compressed_bitsize>>3;
@@ -1987,25 +1986,21 @@ int				ans9_decode(const unsigned char *src, unsigned long long &src_idx, unsign
 		return false;
 	int sizes_offset=4+ctx->bytespersymbol*256*sizeof(short),
 		headersize=sizes_offset+ctx->blockplanecount*sizeof(short);
-	auto src_sizes=(const unsigned short*)(src+src_idx+sizes_offset);
+	auto src_sizes=(const short*)(src+src_idx+sizes_offset);
 	auto src_cdata=src+src_idx+headersize;
 	
 	//ctx->buf_CDF0.write(src+src_idx+4);
 	//ocl_sync();
-	int bypass_size=ctx->block_w*ctx->block_h;
+	//int bypass_size=ctx->block_w*ctx->block_h;
 	int byteoffset=0;
 	for(int k=0;k<ctx->blockplanecount;++k)
 	{
-		if(src_sizes[k]==0x8000)//bypass
-		{
-			byteoffset+=bypass_size;
-			ctx->receiver_sizes[k-1]=-byteoffset;
-		}
+		int bytesize=abs(src_sizes[k])*sizeof(short);
+		byteoffset+=bytesize;
+		if(src_sizes[k]<0)//bypass
+			ctx->receiver_sizes[k]=-(byteoffset>>1);
 		else
-		{
-			byteoffset+=src_sizes[k]*sizeof(short);
-			ctx->receiver_sizes[k-1]=byteoffset;//points at the end of range
-		}
+			ctx->receiver_sizes[k]=byteoffset>>1;//points at the end of range
 	}
 	src_idx+=headersize+byteoffset;
 	int icount=(byteoffset+3)>>2;
@@ -2021,8 +2016,14 @@ int				ans9_decode(const unsigned char *src, unsigned long long &src_idx, unsign
 	//ocl_call_kernel(OCL_zeromem, ctx->iw*ctx->ih, &padded_image, 1);//no need
 	//ctx->buf_stats.write_sub(ctx->symbolinfo, 0, (ctx->bytespersymbol*256+1)*sizeof(SymbolInfo)/sizeof(int));
 	ctx->buf_stats.write(ctx->symbolinfo);
+	ocl_sync();
+	PROF(INITIALIZE_STATS);
 	ctx->buf_cdata.write_sub(src_cdata, 0, icount);
+	ocl_sync();
+	PROF(INITIALIZE_DATA);
 	ctx->buf_sizes.write(ctx->receiver_sizes);
+	ocl_sync();
+	PROF(INITIALIZE_SIZES);
 	ctx->buf_CDF2sym.write(ctx->CDF2sym);
 	ocl_sync();
 	//printf("cdata:\n");

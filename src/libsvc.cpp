@@ -28,7 +28,7 @@ char			g_buf[G_BUF_SIZE]={};
 bool			set_error(const char *file, int line, const char *format, ...)
 {
 	int printed=0;
-	printed+=sprintf_s(g_buf+printed, G_BUF_SIZE-printed, "[%d] ", (int)status.size());
+	printed+=sprintf_s(g_buf+printed, G_BUF_SIZE-printed, "[%d] %s(%d) ", (int)status.size(), file, line);
 	if(format)
 	{
 		va_list args;
@@ -296,7 +296,7 @@ void			svc_dec_get_frame(SVCContext handle, void *data, const void *guide)
 		auto original=(int*)g2;
 		auto result=(int*)data;
 		int imsize=context->w*context->h;
-		for(int k=0;k<imsize;++k)
+		for(int k=imsize-1;k>=0;--k)
 		{
 			if(result[k]!=original[k])
 			{

@@ -28,9 +28,10 @@
 #pragma		comment(lib, "libsvc.lib")
 #endif
 
+//	#define		DEBUG_TEST
+//	#define		PRINT_PROGRESS
+//	#define		DEBUG_GUIDE
 //	#define		SINGLE_EXECUTABLE
-	#define		PRINT_PROGRESS
-//	#define		ANS_GUIDE
 
 
 #define		SIZEOF(STATIC_ARRAY)	(sizeof(STATIC_ARRAY)/sizeof(*(STATIC_ARRAY)))
@@ -218,7 +219,8 @@ void		print_ibuf(const int *buffer, int bw, int bh, int x1, int x2, int y1, int 
 	for(int ky=y1;ky<y2;++ky)
 	{
 		for(int kx=x1;kx<x2;++kx)
-			printf("%08X-", buffer[bw*ky+kx]);
+		//	printf("%08X-", buffer[bw*ky+kx]);
+			printf("%02X-", buffer[bw*ky+kx]);
 		printf("\n");
 	}
 }
@@ -232,34 +234,122 @@ void		print_sbuf(const unsigned char *buffer, unsigned long long bytesize)
 		printf("%04X-", b2[k]);
 	printf("\n");
 }
+#ifdef DEBUG_TEST
+const int
+	iw=31, ih=17,
+	image_size=iw*ih;
+unsigned	buf[image_size]=
+{
+	//182, 181, 183, 183, 185, 186, 182, 184, 191, 189, 189, 188, 190, 191, 192, 192,
+	//187, 181, 184, 188, 191, 191, 191, 191, 192, 192, 191, 190, 192, 192, 193, 195,
+	//191, 185, 187, 190, 191, 191, 191, 192, 193, 192, 192, 191, 191, 193, 193, 195,
+	//194, 190, 189, 191, 190, 192, 192, 193, 194, 194, 194, 194, 194, 193, 193, 195,
+	//193, 191, 192, 193, 192, 192, 194, 195, 196, 196, 197, 197, 197, 195, 196, 198,
+	//192, 192, 192, 193, 193, 193, 194, 194, 195, 195, 195, 196, 196, 196, 198, 200,
+	//193, 193, 193, 194, 195, 196, 195, 195, 195, 195, 195, 196, 196, 197, 198, 199,
+	//197, 195, 194, 195, 195, 196, 196, 195, 196, 197, 196, 195, 197, 199, 200, 199,
+	//199, 197, 196, 196, 196, 196, 196, 196, 196, 201, 199, 197, 199, 201, 202, 201,
+	//200, 198, 197, 198, 198, 199, 199, 198, 197, 199, 198, 198, 198, 200, 201, 201,
+	//200, 198, 198, 199, 199, 200, 200, 199, 198, 201, 200, 199, 200, 200, 201, 199,
+	//199, 199, 199, 200, 200, 201, 201, 198, 197, 201, 200, 199, 199, 199, 200, 199,
+	//200, 200, 200, 200, 201, 202, 202, 199, 199, 202, 201, 200, 200, 200, 200, 200,
+	//199, 200, 200, 200, 201, 203, 203, 202, 201, 202, 201, 200, 200, 201, 201, 201,
+	//200, 200, 200, 201, 202, 203, 204, 203, 203, 202, 201, 201, 201, 202, 203, 203,
+	//201, 201, 202, 202, 203, 205, 205, 205, 204, 203, 202, 202, 202, 203, 204, 204,
+
+	182, 181, 183, 183, 185, 186, 182, 184, 191, 189, 189, 188, 190, 191, 192, 192, 191, 193, 189, 186, 186, 188, 191, 191, 191, 192, 192, 192, 193, 195, 195,
+	187, 181, 184, 188, 191, 191, 191, 191, 192, 192, 191, 190, 192, 192, 193, 195, 196, 191, 190, 191, 193, 196, 197, 197, 196, 200, 201, 202, 203, 203, 200,
+	191, 185, 187, 190, 191, 191, 191, 192, 193, 192, 192, 191, 191, 193, 193, 195, 194, 194, 191, 192, 193, 194, 195, 196, 195, 198, 198, 198, 199, 199, 199,
+	194, 190, 189, 191, 190, 192, 192, 193, 194, 194, 194, 194, 194, 193, 193, 195, 196, 196, 195, 195, 195, 195, 195, 196, 197, 198, 198, 198, 198, 199, 200,
+	193, 191, 192, 193, 192, 192, 194, 195, 196, 196, 197, 197, 197, 195, 196, 198, 199, 196, 196, 197, 196, 195, 195, 197, 199, 200, 200, 200, 200, 201, 201,
+	192, 192, 192, 193, 193, 193, 194, 194, 195, 195, 195, 196, 196, 196, 198, 200, 199, 196, 196, 196, 195, 195, 195, 197, 199, 199, 200, 201, 202, 202, 202,
+	193, 193, 193, 194, 195, 196, 195, 195, 195, 195, 195, 196, 196, 197, 198, 199, 199, 196, 197, 197, 197, 197, 198, 199, 200, 199, 200, 201, 202, 202, 202,
+	197, 195, 194, 195, 195, 196, 196, 195, 196, 197, 196, 195, 197, 199, 200, 199, 198, 200, 199, 199, 200, 201, 201, 201, 201, 201, 201, 202, 203, 203, 203,
+	199, 197, 196, 196, 196, 196, 196, 196, 196, 201, 199, 197, 199, 201, 202, 201, 199, 202, 202, 201, 202, 203, 204, 203, 202, 202, 202, 203, 203, 204, 205,
+	200, 198, 197, 198, 198, 199, 199, 198, 197, 199, 198, 198, 198, 200, 201, 201, 201, 202, 202, 201, 201, 201, 201, 201, 202, 199, 201, 202, 203, 204, 204,
+	200, 198, 198, 199, 199, 200, 200, 199, 198, 201, 200, 199, 200, 200, 201, 199, 199, 201, 201, 201, 201, 201, 201, 201, 201, 200, 201, 202, 203, 204, 204,
+	199, 199, 199, 200, 200, 201, 201, 198, 197, 201, 200, 199, 199, 199, 200, 199, 199, 201, 201, 202, 202, 202, 202, 202, 201, 201, 201, 201, 202, 204, 205,
+	200, 200, 200, 200, 201, 202, 202, 199, 199, 202, 201, 200, 200, 200, 200, 200, 200, 202, 203, 204, 205, 205, 204, 204, 203, 203, 202, 201, 202, 205, 206,
+	199, 200, 200, 200, 201, 203, 203, 202, 201, 202, 201, 200, 200, 201, 201, 201, 201, 201, 202, 203, 204, 204, 203, 203, 202, 203, 201, 200, 202, 204, 205,
+	200, 200, 200, 201, 202, 203, 204, 203, 203, 202, 201, 201, 201, 202, 203, 203, 202, 202, 202, 203, 203, 204, 203, 203, 203, 205, 204, 203, 204, 205, 206,
+	201, 201, 202, 202, 203, 205, 205, 205, 204, 203, 202, 202, 202, 203, 204, 204, 204, 203, 203, 203, 204, 204, 204, 204, 204, 206, 206, 206, 206, 206, 207,
+	200, 202, 202, 203, 204, 206, 206, 206, 205, 204, 204, 203, 203, 204, 204, 204, 204, 205, 204, 204, 205, 205, 205, 206, 206, 207, 207, 207, 207, 207, 208,
+
+	//0, 0, 0, 0, 0, 1, 3, 4, 12, 7, 1, 0, 0, 1, 2, 2,
+	//1, 0, 0, 0, 0, 0, 0, 0,  8, 4, 1, 0, 0, 2, 2, 0,
+	//1, 0, 1, 0, 0, 0, 0, 0,  3, 1, 0, 0, 0, 0, 0, 0,
+	//3, 2, 1, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
+	//6, 5, 3, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
+	//2, 3, 1, 0, 0, 1, 1, 0,  1, 0, 0, 1, 0, 0, 0, 2,
+	//0, 1, 1, 0, 2, 5, 5, 2,  1, 0, 2, 4, 2, 0, 0, 4,
+	//0, 2, 3, 1, 2, 4, 3, 0,  0, 0, 3, 6, 4, 0, 1, 5,
+	//0, 3, 6, 4, 2, 3, 2, 0,  0, 2, 3, 1, 1, 2, 0, 0,
+	//0, 2, 4, 3, 1, 1, 2, 3,  2, 3, 3, 1, 1, 3, 1, 1,
+	//3, 3, 4, 4, 2, 1, 2, 6,  2, 3, 2, 0, 1, 3, 4, 4,
+	//8, 4, 3, 4, 4, 2, 2, 5,  0, 0, 0, 0, 0, 2, 3, 3,
+	//6, 1, 0, 2, 4, 2, 2, 3,  0, 0, 0, 0, 1, 1, 2, 2,
+	//1, 0, 0, 0, 3, 3, 1, 0,  0, 0, 0, 0, 1, 0, 1, 2,
+	//0, 0, 0, 0, 0, 1, 1, 0,  1, 0, 0, 0, 1, 1, 3, 4,
+	//0, 2, 4, 0, 0, 0, 0, 0,  4, 1, 0, 1, 1, 1, 3, 6,
+
+	//0x55555555, 0x55555555,
+	//0x55555555, 0x55555555,
+
+	//0xBAADF00D, 0xBAADF00D, 0xBAADF00D, 0xBAADF00D,
+	//0xBAADF00D, 0xBAADF00D, 0xBAADF00D, 0xBAADF00D,
+	//0xBAADF00D, 0xBAADF00D, 0xBAADF00D, 0xBAADF00D,
+	//0xBAADF00D, 0xBAADF00D, 0xBAADF00D, 0xBAADF00D,
+
+	//0xFF020100, 0xFF050403, 0xFF080706, 0xFF0B0A09,
+	//0xFF0E0D0C, 0xFF11100F, 0xFF141312, 0xFF171615,
+	//0xFF1A1918, 0xFF1D1C1B, 0xFF201F1E, 0xFF232221,
+	//0xFF262524, 0xFF292827, 0xFF2C2B2A, 0xFF2F2E2D,
+
+	//0x00010203, 0x04050607,
+	//0x08090A0B, 0x0C0D0E0F,
+};
+int			b2[image_size];
+static size_t GetStackUsage()//https://stackoverflow.com/questions/1740888/determining-stack-space-with-visual-studio
+{
+    MEMORY_BASIC_INFORMATION mbi;
+    VirtualQuery(&mbi, &mbi, sizeof(mbi));
+    // now mbi.AllocationBase = reserved stack memory base address
+
+    VirtualQuery(mbi.AllocationBase, &mbi, sizeof(mbi));
+    // now (mbi.BaseAddress, mbi.RegionSize) describe reserved (uncommitted) portion of the stack
+    // skip it
+
+    VirtualQuery((char*)mbi.BaseAddress + mbi.RegionSize, &mbi, sizeof(mbi));
+    // now (mbi.BaseAddress, mbi.RegionSize) describe the guard page
+    // skip it
+
+    VirtualQuery((char*)mbi.BaseAddress + mbi.RegionSize, &mbi, sizeof(mbi));
+    // now (mbi.BaseAddress, mbi.RegionSize) describe the committed (i.e. accessed) portion of the stack
+
+    return mbi.RegionSize;
+}
 void		test()
 {
 	svc_set_loglevel(SVC_LOG_PROFILER);
-	const int
-		iw=8, ih=8,
-		image_size=iw*ih;
-	unsigned buf[image_size]=
-	{
-		//0x55555555, 0x55555555,
-		//0x55555555, 0x55555555,
-
-		//0xBAADF00D, 0xBAADF00D, 0xBAADF00D, 0xBAADF00D,
-		//0xBAADF00D, 0xBAADF00D, 0xBAADF00D, 0xBAADF00D,
-		//0xBAADF00D, 0xBAADF00D, 0xBAADF00D, 0xBAADF00D,
-		//0xBAADF00D, 0xBAADF00D, 0xBAADF00D, 0xBAADF00D,
-
-		//0xFF020100, 0xFF050403, 0xFF080706, 0xFF0B0A09,
-		//0xFF0E0D0C, 0xFF11100F, 0xFF141312, 0xFF171615,
-		//0xFF1A1918, 0xFF1D1C1B, 0xFF201F1E, 0xFF232221,
-		//0xFF262524, 0xFF292827, 0xFF2C2B2A, 0xFF2F2E2D,
-
-		//0x00010203, 0x04050607,
-		//0x08090A0B, 0x0C0D0E0F,
-	};
-	for(int k=0;k<image_size;++k)
-		buf[k]=k/8;
+	//buf[iw*3+3]=1;
+	//for(int k=0;k<image_size;++k)
+	//	buf[k]=k?255/k:255;
+	//{
+	//	auto p=(unsigned char*)(buf+k);
+	//	p[0]=rand();
+	//	p[1]=rand();
+	//	p[2]=rand();
+	//	p[3]=rand();
+	//	//p[0]=rand(), p[0]>>=4;
+	//	//p[1]=rand(), p[1]>>=4;
+	//	//p[2]=rand(), p[2]>>=4;
+	//	//p[3]=rand(), p[3]>>=4;
+	//}
+	//	buf[k]=rand();
+	//	buf[k]=k/8;
+	//	buf[k]=k;
 	//	buf[k]=0x55555555;
-	//printf("src:\n"), print_ibuf((int*)buf, iw, ih, 0, iw, 0, ih);
+	printf("src:\n"), print_ibuf((int*)buf, iw, ih, 0, iw, 0, ih);
 	auto encoder=svc_enc_start(iw, ih, 4, 8, SVC_UINT8, 1, 1);	SVC_CHECK();
 	svc_enc_add_frame(encoder, buf);			SVC_CHECK();
 //	svc_enc_add_frame(encoder, buf);			SVC_CHECK();
@@ -273,16 +363,21 @@ void		test()
 	auto decoder=svc_dec_start(cdata, csize);	SVC_CHECK();
 	SVCHeader info={};
 	svc_dec_get_info(decoder, &info);			SVC_CHECK();
-	int f1[image_size];
-	svc_dec_get_frame(decoder, f1, buf);		SVC_CHECK();
-	//printf("decoded 1:\n"), print_ibuf(f1, iw, ih, 0, iw, 0, ih);
-//	svc_dec_get_frame(decoder, f1, buf);		SVC_CHECK();
-	//printf("decoded 2:\n"), print_ibuf(f1, iw, ih, 0, iw, 0, ih);
+	svc_dec_get_frame(decoder, b2, nullptr);		SVC_CHECK();
+	printf("decoded 1:\n"), print_ibuf(b2, iw, ih, 0, iw, 0, ih);
+//	svc_dec_get_frame(decoder, b2, buf);		SVC_CHECK();
+	//printf("decoded 2:\n"), print_ibuf(b2, iw, ih, 0, iw, 0, ih);
 	svc_cleanup(decoder);		SVC_CHECK();
 
 	delete[] cdata;
 	exit_success();
 }
+//void		test2()
+//{
+//	int b2[100]={};
+//	printf("Stack usage: %lld\n", (long long)GetStackUsage());
+//}
+#endif
 void		benchmark(int frame_w, int frame_h, int nframes, bool verify, int loud)
 {
 	printf("Benchmark\n");
@@ -344,11 +439,16 @@ void		benchmark(int frame_w, int frame_h, int nframes, bool verify, int loud)
 }
 int			main(int argc, char **argv)
 {
+	//printf("Stack usage: %lld\n", (long long)GetStackUsage());
+	//test2();
+
 	console_buffer_size(120, 9000);
 	auto t1=time_sec();
 	printf("Simple Video Codec - %s %s\n\n", __DATE__, __TIME__);
-
+	
+#ifdef DEBUG_TEST
 	test();//
+#endif
 
 	bool bm=argc>1&&!strcmp(argv[1], "-bm");
 	if(argc!=4&&!bm)
@@ -523,8 +623,9 @@ int			main(int argc, char **argv)
 		//}
 		int frameres=info.w*info.h;
 		auto buffer=(unsigned char*)malloc(frameres*sizeof(int));
-#ifdef ANS_GUIDE
-		std::string guidepath="D:/Share Box/Scope/20220226 1/png/";//
+#ifdef DEBUG_GUIDE
+		std::string guidepath="D:/Share Box/Scope/20210428 1 moon/batch 2/";//
+	//	std::string guidepath="D:/Share Box/Scope/20220226 1/png/";//
 		std::vector<std::string> guidenames;
 		get_filenames_from_folder(guidepath, extensions, ext_count, guidenames);//
 #endif
@@ -535,7 +636,7 @@ int			main(int argc, char **argv)
 			printf("\rProcessing %d/%d...\t\t", k+1, info.nframes);
 #endif
 			
-#ifdef ANS_GUIDE
+#ifdef DEBUG_GUIDE
 			int iw2=0, ih2=0, nch2=0;
 			original_image=stbi_load((guidepath+guidenames[k]).c_str(), &iw2, &ih2, &nch2, 4);//
 			if(!original_image)

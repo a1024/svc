@@ -68,7 +68,7 @@ SVC_API unsigned char*	svc_enc_finish(SVCContext handle, unsigned long long *byt
 
 SVC_API SVCContext		svc_dec_start(const unsigned char *data, unsigned long long bytesize);
 SVC_API void			svc_dec_get_info(SVCContext handle, SVCHeader *info);
-SVC_API void			svc_dec_get_frame(SVCContext handle, void *data, const void *guide);
+SVC_API void			svc_dec_get_frame(SVCContext handle, void *data, const void *debug_guide);
 
 SVC_API void			svc_cleanup(SVCContext handle);
 

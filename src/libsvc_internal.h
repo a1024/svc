@@ -105,7 +105,7 @@ enum			DimInfo
 };
 
 //OpenCL ABAC - 32-bit
-const int		abac9_block_w=64, abac9_block_h=64;
+const int		abac9_block_w=16, abac9_block_h=16;
 struct			ABAC9Context//32bit depth
 {
 	int iw, ih,//original image dimensions
