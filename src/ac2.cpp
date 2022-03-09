@@ -1874,7 +1874,7 @@ int				ans9_encode(const void *src, unsigned char *&dst, unsigned long long &dst
 	ctx->buf_stats.write(ctx->symbolinfo);
 	//ocl_call_kernel(OCL_zeromem, ctx->alloccount, &ctx->buf_cdata, 1);
 	ocl_sync();
-	PROF(INITIALIZE);
+	PROF(INITIALIZE_DATA);
 	//printf("GPU image:\n");//
 	//print_clmem_as_ints(ctx->buf_image);//
 	//printf("GPU dim:\n");//
@@ -2012,8 +2012,7 @@ int				ans9_decode(const unsigned char *src, unsigned long long &src_idx, unsign
 	//args[2]=ctx->buf_stats;
 	//args[3]=ctx->buf_CDF2sym;
 	//ocl_call_kernel(OCL_ans_dec_prep2, ctx->bytespersymbol<<8, args, 4);
-	//CLBuffer padded_image=ctx->buf_image_p.handle?ctx->buf_image_p:ctx->buf_image0;
-	//ocl_call_kernel(OCL_zeromem, ctx->iw*ctx->ih, &padded_image, 1);//no need
+
 	//ctx->buf_stats.write_sub(ctx->symbolinfo, 0, (ctx->bytespersymbol*256+1)*sizeof(SymbolInfo)/sizeof(int));
 	ctx->buf_stats.write(ctx->symbolinfo);
 	ocl_sync();
@@ -2028,7 +2027,7 @@ int				ans9_decode(const unsigned char *src, unsigned long long &src_idx, unsign
 	ocl_sync();
 	//printf("cdata:\n");
 	//print_clmem_as_bytes(ctx->buf_cdata, icount, 0);//yes
-	PROF(INITIALIZE);
+	PROF(INITIALIZE_ICDF);
 
 	args[0]=ctx->buf_image0;
 	args[1]=ctx->buf_dim;
@@ -2036,21 +2035,10 @@ int				ans9_decode(const unsigned char *src, unsigned long long &src_idx, unsign
 	args[3]=ctx->buf_cdata;
 	args[4]=ctx->buf_sizes;
 	args[5]=ctx->buf_CDF2sym;
-	ocl_call_kernel(OCL_ans_dec2D32, ctx->block_xcount*ctx->block_ycount*ctx->bytespersymbol, args, 6);//13.25 GB/s
-	//ocl_call_kernel(OCL_ans_dec2D32, ctx->block_xcount*ctx->block_ycount, args, 6);//7.08 GB/s
+	ocl_call_kernel(OCL_ans_dec2D32, ctx->block_xcount*ctx->block_ycount*ctx->bytespersymbol, args, 6);
 	ocl_sync();
 	PROF(DECODE);
 
-//	if(ctx->buf_image_p.handle)
-//	{
-//		args[0]=ctx->buf_image0;
-//		args[1]=ctx->buf_image_p;
-//		args[2]=ctx->buf_dim;
-//		ocl_call_kernel(OCL_unpad, ctx->iw*ctx->ih, args, 3);
-//#ifdef ANS_CL_EMUATE_RENDER2GLTEXTURE
-//		ocl_sync();
-//#endif
-//	}
 #ifndef ANS_CL_EMUATE_RENDER2GLTEXTURE
 	ctx->buf_image0.read(dst);
 #endif
@@ -2059,6 +2047,9 @@ int				ans9_decode(const unsigned char *src, unsigned long long &src_idx, unsign
 	//print_clmem_as_ints(ctx->buf_image);
 
 	auto t2=__rdtsc();
+	//prof_cycles[PROF_DELTA]=0;//
+	prof_end();//
+	PROF_INIT();
 	if(loud)
 	{
 		int imsize=ctx->iw*ctx->ih;

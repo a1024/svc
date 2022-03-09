@@ -489,7 +489,7 @@ int			main(int argc, char **argv)
 	//svc_set_loglevel(SVC_LOG_PROFILER);
 	//bool dummyenc=!strcmp(argv[1], "-denc"), dummydec=!strcmp(argv[1], "-ddec");
 	if(bm)
-		benchmark(1920, 1080, 64, false, false);
+		benchmark(1920, 1080, 128, false, false);
 		//benchmark(128, 128, 2, true, true);
 		//benchmark(64, 64, 1, true, true);
 	else if(!strcmp(argv[1], "-enc"))

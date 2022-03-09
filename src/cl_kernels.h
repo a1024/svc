@@ -37,7 +37,7 @@
 //	#define		PRINT_DEC_STATE		idx==0&&kp==0
 //	#define		PRINT_READS			idx==0&&kp==0
 
-//	#define		DISABLE_BYPASS//should be off
+//	#define		DISABLE_BYPASS
 
 typedef enum
 {
@@ -587,14 +587,17 @@ __kernel void ans_dec2D32(__global unsigned char *dst, __constant int *dim, __gl
 #endif
 			unsigned short c=(unsigned short)state;
 			unsigned char symbol=bypass_mask?c>>8:CDF2sym[c];
+			//unsigned char symbol=CDF2sym[c];
 			dst[kx]=symbol;
 			__global SymbolInfo *info=stats+(symbol&encode_mask);
+			//__global SymbolInfo *info=stats+symbol;
 #ifdef ANS_PRINT_STATE
 			if(ANS_PRINT_STATE)
 				printf("kc %d (%d,%d) x %08X s %02X freq %04X CDF %04X idx %d", kc, kx, ky, state, symbol, info->freq, (bypass_mask&symbol<<8|info->CDF), u16_idx);
 #endif
 		//	if(info->freq)
 				state=info->freq*(state>>16)+c-(bypass_mask&symbol<<8|info->CDF);
+				//state=info->freq*(state>>16)+c-info->CDF;
 #ifdef ANS_PRINT_WARNINGS
 			else if(ANS_PRINT_WARNINGS)
 				printf("kc %d (%d,%d) x %08X s %02X freq %04X=ZERO idx %d", kc, kx, ky, state, symbol, info->freq, u16_idx);

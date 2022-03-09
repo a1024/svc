@@ -38,7 +38,7 @@
 	PROF_LABEL(INITIALIZE_STATS)\
 	PROF_LABEL(INITIALIZE_DATA)\
 	PROF_LABEL(INITIALIZE_SIZES)\
-	PROF_LABEL(INITIALIZE)\
+	PROF_LABEL(INITIALIZE_ICDF)\
 	PROF_LABEL(ENCODE)\
 	PROF_LABEL(DECODE)\
 	PROF_LABEL(READ)\
@@ -83,6 +83,11 @@ const char		*prof_labels[]=
 long long		prof_cycles[PROF_COUNT]={}, prof_temp=0;
 void			prof_end()
 {
+	//static int callcount=0;
+	//if(callcount==1)
+	//	int LOL_1=0;
+	//++callcount;
+
 	int pad=0;
 	for(int k=0;k<PROF_COUNT;++k)
 	{
