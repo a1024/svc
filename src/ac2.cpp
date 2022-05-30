@@ -179,10 +179,13 @@ int				abac4_encode(const void *src, int imsize, int depth, int bytestride, unsi
 		int bit_offset=kp>>3, bit_shift=kp&7;
 		int bit_offset2=(kp+1)>>3, bit_shift2=(kp+1)&7;
 		//auto &plane=planes[depth-1-kp];
-		int prob=0x8000, prob_correct=0x8000;//cheap weighted average predictor
+		unsigned prob=0x8000, prob_correct=0x8000;//cheap weighted average predictor
 
 		u64 hitcount=1;
-
+		
+#ifdef DEBUG_PRINT
+		printf("\n");//
+#endif
 		for(int kb=0, kb2=0;kb<imsize;++kb, kb2+=bytestride)//analyze bitplane
 		{
 			int bit=buffer[kb2+bit_offset]>>bit_shift&1;
@@ -191,6 +194,9 @@ int				abac4_encode(const void *src, int imsize, int depth, int bytestride, unsi
 			//unsigned p0=0x8000+(long long)(prob-0x8000)*hitcount/(kb+1);
 			p0=clamp(1, p0, prob_max);
 			int correct=bit^(p0>=0x8000);
+#ifdef DEBUG_PRINT
+			printf("%d", bit);//
+#endif
 			//if(kp==1)
 			//	printf("%d", bit);//actual bits
 			//	printf("%d", p0<0x8000);//predicted bits
@@ -199,6 +205,9 @@ int				abac4_encode(const void *src, int imsize, int depth, int bytestride, unsi
 			prob=!bit<<15|prob>>1;
 			prob_correct=correct<<15|prob_correct>>1;
 		}
+#ifdef DEBUG_PRINT
+		printf("\n");//
+#endif
 		PROF(ENC_ANALYZE_PLANE);
 		u64 offset=out_idx_conf+kp*sizeof(int);
 		store_int_le(out_data, offset, (int)hitcount);
@@ -207,6 +216,9 @@ int				abac4_encode(const void *src, int imsize, int depth, int bytestride, unsi
 
 		if(hitcount<imsize*min_conf)//incompressible, bypass
 		{
+#ifdef DEBUG_PRINT
+			printf("BYPASS\n");//
+#endif
 			int planesize=(imsize+7)>>3;
 			emit_pad(out_data, out_size, out_cap, planesize);
 			auto plane=out_data+out_size;
@@ -387,7 +399,7 @@ int				abac4_encode(const void *src, int imsize, int depth, int bytestride, unsi
 #ifdef AC_MEASURE_PREDICTION
 		printf("Predicted: %6lld / %6lld = %lf%%\n", hitnum, hitden, 100.*hitnum/hitden);
 #endif
-		printf("Bit\tbytes\tratio,\tbytes/bitplane = %d\n", imsize>>3);
+		printf("Bit\tbytes\tratio,\tbytes/bitplane = %d\n", (imsize>>3)+((imsize&7)!=0));
 		for(int k=0;k<depth;++k)
 		{
 			int size=load_int_le(out_data+out_idx_sizes+k*sizeof(int));
@@ -428,7 +440,7 @@ int				abac4_decode(const unsigned char *in_data, unsigned long long &in_idx, un
 	//	int ncodes=load_int_le(sizes+(depth-1-kp)*sizeof(int));
 		auto plane=data+cusize;
 		
-		int prob=0x8000, prob_correct=0x8000;
+		unsigned prob=0x8000, prob_correct=0x8000;
 #if 1
 		u64 hitcount=load_int_le(conf+kp*sizeof(int));
 	//	u64 hitcount=load_int_le(conf+(depth-1-kp)*sizeof(int));

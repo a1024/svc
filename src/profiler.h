@@ -18,7 +18,7 @@
 #ifndef PROFILER_H
 #define PROFILER_H
 
-	#define	PROFILER
+//	#define	PROFILER
 
 #ifdef PROFILER
 
