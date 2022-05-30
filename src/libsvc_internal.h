@@ -24,11 +24,20 @@
 #include		<vector>
 #include		<string>
 
+	#define		NO_OPENCL
+	#define		NO_AVX2
+
+#ifndef NO_OPENCL
 	#define		ANS_CL
 //	#define		ABAC_CL
+#endif
+#ifndef NO_AVX2
 //	#define		ANS_AVX2//TODO
+#endif
 //	#define		ANS_SSE2//TODO
 //	#define		ANS_64BIT
+//	#define		ANS_32BIT
+//otherwise ABAC is used
 
 //	#define		SUBTRACT_PREV_FRAME
 
@@ -84,6 +93,22 @@ double			_10pow(int n);
 
 
 //SVC
+void			apply_intDCT_8x8x8_8bit(const unsigned char *src, unsigned short *dst, int iw, int ih, int stride);
+
+struct			SymbolInfo
+{
+	unsigned short
+		freq,//quantized
+		cmpl_freq,
+		shift,
+		reserved0;
+	unsigned
+		CDF,
+		inv_freq,
+		bias,
+		renorm_limit;
+};
+#ifndef NO_OPENCL
 enum			DimInfo
 {
 	DIM_W0,
@@ -139,19 +164,6 @@ int				abac9_encode(const void *src, unsigned char *&dst, unsigned long long &ds
 int				abac9_decode(const unsigned char *src, unsigned long long &src_idx, unsigned long long src_size, void *dst, ABAC9Context *ctx, int loud);
 
 //OpenCL ANS
-struct			SymbolInfo
-{
-	unsigned short
-		freq,//quantized
-		cmpl_freq,
-		shift,
-		reserved0;
-	unsigned
-		CDF,
-		inv_freq,
-		bias,
-		renorm_limit;
-};
 struct			ANS9Context//32bit depth
 {
 	int iw, ih,//original image dimensions
@@ -188,6 +200,7 @@ struct			ANS9Context//32bit depth
 int				ans9_prep(int iw, int ih, int block_w, int block_h, int bytespersymbol, int encode, ANS9Context *ctx);
 int				ans9_encode(const void *src, unsigned char *&dst, unsigned long long &dst_size, unsigned long long &dst_cap, ANS9Context *ctx, int loud);
 int				ans9_decode(const unsigned char *src, unsigned long long &src_idx, unsigned long long src_size, void *dst, ANS9Context *ctx, int loud);
+#endif
 
 bool			set_error(const char *file, int line, const char *format, ...);
 #define			ERROR(MESSAGE, ...)		set_error(__FILE__, __LINE__, MESSAGE, ##__VA_ARGS__)

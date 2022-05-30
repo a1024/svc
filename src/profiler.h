@@ -23,7 +23,7 @@
 #ifdef PROFILER
 
 #ifdef __GNUC__
-#define	__rdtsc	__builtin_ia32_rdtsc
+#include<x86intrin.h>
 #else
 #include<intrin.h>
 #endif
@@ -45,6 +45,7 @@
 	PROF_LABEL(PACK)\
 	PROF_LABEL(DELTA)\
 	\
+	PROF_LABEL(INITIALIZE)\
 	PROF_LABEL(SEND_FRAME)\
 	PROF_LABEL(ENCODE_PREP)\
 	PROF_LABEL(FETCH)\

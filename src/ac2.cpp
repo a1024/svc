@@ -22,7 +22,6 @@
 #include		<string.h>
 #include		<math.h>
 #include		<tmmintrin.h>
-//#include		<intrin.h>
 #ifdef __GNUC__
 #include		<x86intrin.h>
 #endif
@@ -30,11 +29,14 @@
 
 //	#define		ANS_CL_EMUATE_RENDER2GLTEXTURE
 
-//	#define		ANS_ENC_DIV_FREE
-//	#define		ANS_PRINT_STATE2
+//	#define		ANS_PRINT_EMITS		kc==0
+//	#define		ANS_PRINT_READS		kc==0
+//	#define		ANS_PRINT_STATE2	kc==0
 //	#define		ANS_PRINT_STATE//X
 //	#define		ANS_PRINT_HISTOGRAM
 //	#define		ANS_CHECK_STATE
+
+//	#define		ANS_ENC_DIV_FREE
 
 	#define		AC_MEASURE_PREDICTION
 
@@ -64,7 +66,11 @@ bool			set_error(const char *file, int line, const char *msg, ...);
 void			pause()
 {
 	int k=0;
+#ifdef __linux__
+	scanf("%d", &k);
+#else
 	scanf_s("%d", &k, 1);
+#endif
 }
 
 typedef unsigned long long u64;
@@ -76,11 +82,7 @@ const int		magic_ac04='A'|'C'<<8|'0'<<16|'4'<<24,//ABAC
 
 				magic_ac09='A'|'C'<<8|'0'<<16|'9'<<24,//OpenCL ABAC
 				magic_an09='A'|'N'<<8|'0'<<16|'9'<<24;//OpenCL ANS
-//struct		ABAC4Header
-//{
-//	int magic;//ac04
-//	int sizes[];
-//};
+
 inline int		clamp(int lo, int x, int hi)
 {
 	if(x<lo)
@@ -184,9 +186,9 @@ int				abac4_encode(const void *src, int imsize, int depth, int bytestride, unsi
 		for(int kb=0, kb2=0;kb<imsize;++kb, kb2+=bytestride)//analyze bitplane
 		{
 			int bit=buffer[kb2+bit_offset]>>bit_shift&1;
-			int p0=((long long)(prob-0x8000)*prob_correct>>16);
+			unsigned p0=((long long)(prob-0x8000)*prob_correct>>16);
 			p0+=0x8000;
-			//int p0=0x8000+(long long)(prob-0x8000)*hitcount/(kb+1);
+			//unsigned p0=0x8000+(long long)(prob-0x8000)*hitcount/(kb+1);
 			p0=clamp(1, p0, prob_max);
 			int correct=bit^(p0>=0x8000);
 			//if(kp==1)
@@ -205,7 +207,8 @@ int				abac4_encode(const void *src, int imsize, int depth, int bytestride, unsi
 
 		if(hitcount<imsize*min_conf)//incompressible, bypass
 		{
-			emit_pad(out_data, out_size, out_cap, (imsize+7)>>3);
+			int planesize=(imsize+7)>>3;
+			emit_pad(out_data, out_size, out_cap, planesize);
 			auto plane=out_data+out_size;
 			//plane.resize((imsize+7)>>3, 0);
 			for(int kb=0, kb2=0, b=0;kb<imsize;++kb, kb2+=bytestride)
@@ -215,6 +218,7 @@ int				abac4_encode(const void *src, int imsize, int depth, int bytestride, unsi
 			//	int bit=buffer[kb]>>kp&1;
 				plane[byte_idx]|=bit<<bit_idx;
 			}
+			out_size+=planesize;
 			PROF(ENC_BYPASS_PLANE);
 		}
 		else
@@ -265,7 +269,7 @@ int				abac4_encode(const void *src, int imsize, int depth, int bytestride, unsi
 					start=0, range=0xFFFFFFFF;//because 1=0.9999...
 				}
 				
-				int p0=prob-0x8000;
+				unsigned p0=prob-0x8000;
 				p0=p0*prob_correct>>16;
 				p0=p0*prob_correct>>16;
 				int sure=-(prevbit==prevbit0);
@@ -277,9 +281,9 @@ int				abac4_encode(const void *src, int imsize, int depth, int bytestride, unsi
 				//	p0=0x8000;
 				//	p0=0xFFFF-p0;
 
-				//int p0=0x8000+((long long)(prob-0x8000)*(prevbit==prevbit0?hitratio_sure:hitratio_notsure)>>16);
+				//unsigned p0=0x8000+((long long)(prob-0x8000)*(prevbit==prevbit0?hitratio_sure:hitratio_notsure)>>16);
 
-				//int p0=(long long)(prob-0x8000)*sqrthitcount>>16;
+				//unsigned p0=(long long)(prob-0x8000)*sqrthitcount>>16;
 				//if(prevbit==prevbit0)
 				//	p0=(long long)p0*hitcount>>16;
 				//p0+=0x8000;
@@ -287,12 +291,12 @@ int				abac4_encode(const void *src, int imsize, int depth, int bytestride, unsi
 				//int confboost=prevbit==prevbit0;
 				//confboost-=!confboost;
 				//confboost<<=LOG_CONFBOOST;
-				//int p0=0x8000+((long long)(prob-0x8000)*(hitcount+confboost)>>16);
+				//unsigned p0=0x8000+((long long)(prob-0x8000)*(hitcount+confboost)>>16);
 
-			//	int p0=0x8000+(int)((prob-0x8000)*(prevbit==prevbit0?sqrt((double)test_conf[kp]/imsize):(double)test_conf[kp]*test_conf[kp]/((double)imsize*imsize)));
-			//	int p0=prevbit==prevbit0?prob:0x8000;
-			//	int p0=0x8000+(long long)(prob-0x8000)*test_conf[kp]/imsize;
-			//	int p0=0x8000+(long long)(prob-0x8000)*hitcount/(kb+1);
+			//	unsigned p0=0x8000+(int)((prob-0x8000)*(prevbit==prevbit0?sqrt((double)test_conf[kp]/imsize):(double)test_conf[kp]*test_conf[kp]/((double)imsize*imsize)));
+			//	unsigned p0=prevbit==prevbit0?prob:0x8000;
+			//	unsigned p0=0x8000+(long long)(prob-0x8000)*test_conf[kp]/imsize;
+			//	unsigned p0=0x8000+(long long)(prob-0x8000)*hitcount/(kb+1);
 				p0=clamp(1, p0, prob_max);
 				unsigned r2=(unsigned)(range*p0>>16);
 				r2+=(r2==0)-(r2==range);
@@ -436,6 +440,11 @@ int				abac4_decode(const unsigned char *in_data, unsigned long long &in_idx, un
 				int bit=plane[byte_idx]>>bit_idx&1;
 				buffer[kb2+bit_offset]|=bit<<bit_shift;
 			//	buffer[kb]|=bit<<kp;
+#ifdef ENABLE_GUIDE
+				int original_bit=((unsigned char*)guide)[kb2+bit_offset]>>bit_shift&1;
+				if(bit!=original_bit)
+					FAIL("Decode error (bypass): plane %d expected %d got %d", kp, original_bit, bit);
+#endif
 			}
 			cusize+=ncodes;
 			PROF(DEC_BYPASS_PLANE);
@@ -471,7 +480,7 @@ int				abac4_decode(const unsigned char *in_data, unsigned long long &in_idx, un
 				prevbit=buffer[kb2+bit_offset2]>>bit_shift2&1;
 		//	int prevbit=buffer[kb]>>(kp+1)&1;
 #endif
-			int p0=prob-0x8000;
+			unsigned p0=prob-0x8000;
 			p0=p0*prob_correct>>16;
 			p0=p0*prob_correct>>16;
 			int sure=-(prevbit==prevbit0);
@@ -483,9 +492,9 @@ int				abac4_decode(const unsigned char *in_data, unsigned long long &in_idx, un
 			//	p0=0x8000;
 			//	p0=0xFFFF-p0;
 
-			//int p0=0x8000+((long long)(prob-0x8000)*(prevbit==prevbit0?hitratio_sure:hitratio_notsure)>>16);
+			//unsigned p0=0x8000+((long long)(prob-0x8000)*(prevbit==prevbit0?hitratio_sure:hitratio_notsure)>>16);
 
-			//int p0=(long long)(prob-0x8000)*sqrthitcount>>16;
+			//unsigned p0=(long long)(prob-0x8000)*sqrthitcount>>16;
 			//if(prevbit==prevbit0)
 			//	p0=(long long)p0*hitcount>>16;
 			//p0+=0x8000;
@@ -493,12 +502,12 @@ int				abac4_decode(const unsigned char *in_data, unsigned long long &in_idx, un
 			//int confboost=prevbit==prevbit0;
 			//confboost-=!confboost;
 			//confboost<<=LOG_CONFBOOST;
-			//int p0=0x8000+((long long)(prob-0x8000)*(hitcount+confboost)>>16);
+			//unsigned p0=0x8000+((long long)(prob-0x8000)*(hitcount+confboost)>>16);
 
-		//	int p0=0x8000+(int)((prob-0x8000)*(prevbit==prevbit0?sqrt((double)test_conf[kp]/imsize):(double)test_conf[kp]*test_conf[kp]/((double)imsize*imsize)));
-		//	int p0=prevbit==prevbit0?prob:0x8000;
-		//	int p0=0x8000+(long long)(prob-0x8000)*test_conf[kp]/imsize;
-		//	int p0=0x8000+(long long)(prob-0x8000)*hitcount/(kb+1);
+		//	unsigned p0=0x8000+(int)((prob-0x8000)*(prevbit==prevbit0?sqrt((double)test_conf[kp]/imsize):(double)test_conf[kp]*test_conf[kp]/((double)imsize*imsize)));
+		//	unsigned p0=prevbit==prevbit0?prob:0x8000;
+		//	unsigned p0=0x8000+(long long)(prob-0x8000)*test_conf[kp]/imsize;
+		//	unsigned p0=0x8000+(long long)(prob-0x8000)*hitcount/(kb+1);
 			p0=clamp(1, p0, prob_max);
 			unsigned r2=(unsigned)(range*p0>>16);
 			r2+=(r2==0)-(r2==range);
@@ -529,6 +538,11 @@ int				abac4_decode(const unsigned char *in_data, unsigned long long &in_idx, un
 			
 			buffer[kb2+bit_offset]|=bit<<bit_shift;
 		//	buffer[kb]|=bit<<kp;
+#ifdef ENABLE_GUIDE
+			int original_bit=((unsigned char*)guide)[kb2+bit_offset]>>bit_shift&1;
+			if(bit!=original_bit)
+				FAIL("Decode error (AC): plane %d expected %d got %d", kp, original_bit, bit);
+#endif
 			++kb;
 			
 			while((start^(start+(unsigned)range))<0x1000000)//shift-out identical bytes			zpaq 1.10
@@ -570,6 +584,23 @@ struct			SortedHistInfo
 		qfreq;//quantized freq
 	SortedHistInfo():idx(0), freq(0), qfreq(0){}
 };
+void			print_histogram(SortedHistInfo *h, int nsymbols)
+{
+	printf("s\tf\tCDF,\timsize %d\n", nsymbols);
+	for(int k=0;k<ANS_NLEVELS;++k)
+	{
+		auto &si=h[k];
+		if(si.freq)
+		{
+			if(!si.qfreq)
+				printf("[%3d] s %02X q %04X f %04X UNDERFLOW\n", k, si.idx, si.qfreq, si.freq);
+			else if(si.qfreq==0xFFFF||si.qfreq==0x10000)
+				printf("[%3d] s %02X q %04X f %04X OVERFLOW\n", k, si.idx, si.qfreq, si.freq);
+			else
+				printf("[%3d] s %02X q %04X f %04X\n", k, si.idx, si.qfreq, si.freq);
+		}
+	}
+}
 int				ans_calc_histogram(const unsigned char *buffer, int nsymbols, int bytestride, unsigned short *histogram, int prob_bits, int integrate)
 {
 	int prob_sum=1<<prob_bits;
@@ -581,19 +612,24 @@ int				ans_calc_histogram(const unsigned char *buffer, int nsymbols, int bytestr
 	}
 	SortedHistInfo h[ANS_NLEVELS];
 	for(int k=0;k<ANS_NLEVELS;++k)
+	{
 		h[k].idx=k;
+		h[k].freq=0;
+	}
 	int bytesize=nsymbols*bytestride;
 	PROF(HISTOGRAM_INIT);
 	for(int k=0;k<bytesize;k+=bytestride)//this loop takes 73% of encode time
 		++h[buffer[k]].freq;
-	//	++h[buffer[k]>>bit0&mask].freq;
 	PROF(HISTOGRAM_LOOKUP);
+	for(int k=0;k<ANS_NLEVELS;++k)
+		h[k].qfreq=((long long)h[k].freq<<ANS_PROB_BITS)/nsymbols;
+
+	//print_histogram(h, nsymbols);//
+	
 	if(nsymbols!=prob_sum)
 	{
 		const int prob_max=prob_sum-1;
 	//	const int prob_max=prob_sum-2;
-		for(int k=0;k<ANS_NLEVELS;++k)
-			h[k].qfreq=((long long)h[k].freq<<ANS_PROB_BITS)/nsymbols;
 
 		std::sort(h, h+ANS_NLEVELS, [](SortedHistInfo const &a, SortedHistInfo const &b)
 		{
@@ -770,7 +806,7 @@ inline bool		rans_encode(const unsigned char *&srcptr, unsigned char *&dst, unsi
 	}
 	PROF(RENORM);
 #ifdef ANS_PRINT_STATE2
-	printf("enc: 0x%08X = 0x%08X+(0x%08X*0x%08X>>(32+%d))*0x%04X+0x%08X\n", state+(((long long)state*si.inv_freq>>32)>>si.shift)*si.cmpl_freq+si.bias, state, state, si.inv_freq, si.shift, si.cmpl_freq, si.bias);
+	printf("enc: 0x%08X = 0x%08X+(0x%08X*0x%08X>>(32+%d))*0x%04X+0x%08X\n", state+((unsigned)((long long)state*si.inv_freq>>32)>>si.shift)*si.cmpl_freq+si.bias, state, state, si.inv_freq, si.shift, si.cmpl_freq, si.bias);
 #endif
 #ifdef ANS_ENC_DIV_FREE
 	state+=(((long long)state*si.inv_freq>>32)>>si.shift)*si.cmpl_freq+si.bias;//Ryg's division-free rANS encoder	https://github.com/rygorous/ryg_rans/blob/master/rans_byte.h
@@ -1101,7 +1137,7 @@ int				rans6_encode(const void *src, int nsymbols, int bytespersymbol, unsigned 
 		}
 		PROF(RENORM);
 #ifdef ANS_PRINT_STATE2
-		printf("enc: 0x%016X = 0x%016X+(0x%016X*0x%016X>>(32+%d))*0x%04X+0x%08X\n", x+(((long long)x*si.inv_freq>>32)>>si.shift)*si.cmpl_freq+si.bias, x, x, si.inv_freq, si.shift, si.cmpl_freq, si.bias);
+		printf("enc: 0x%016llX = 0x%016llX+(0x%016llX*0x%016llX>>(32+%d))*0x%04X+0x%08X\n", x+(((long long)x*si.inv_freq>>32)>>si.shift)*si.cmpl_freq+si.bias, x, x, si.inv_freq, si.shift, si.cmpl_freq, si.bias);
 #endif
 #ifdef ANS_ENC_DIV_FREE
 #ifdef __GNUC__
@@ -1152,7 +1188,7 @@ int				rans6_decode(const unsigned char *src, unsigned long long &src_idx, unsig
 	if(!rans6_prep(hist, bytespersymbol, info, CDF2sym, loud))
 		return false;
 
-	RANS_state state[16]={};
+	unsigned long long state[16]={};
 	const unsigned char *srcptr=nullptr;
 	unsigned char *dstptr=nullptr;
 	int headersize=8+bytespersymbol*ANS_NLEVELS*sizeof(short);
@@ -1196,7 +1232,7 @@ int				rans6_decode(const unsigned char *src, unsigned long long &src_idx, unsig
 		*dstptr=s;
 		PROF(FETCH);
 #ifdef ANS_PRINT_STATE2
-		printf("dec: 0x%016X = 0x%04X*(0x%016X>>%d)+0x%04X-0x%08X\n", si.freq*(state>>ANS_PROB_BITS)+c-si.CDF, (int)si.freq, state, ANS_PROB_BITS, c, si.CDF);
+		printf("dec: 0x%016llX = 0x%04X*(0x%016llX>>%d)+0x%04X-0x%08X\n", si.freq*(x>>ANS_PROB_BITS)+c-si.CDF, (int)si.freq, x, ANS_PROB_BITS, c, si.CDF);
 #endif
 		x=si.freq*(x>>ANS_PROB_BITS)+c-si.CDF;
 		PROF(UPDATE);
@@ -1242,6 +1278,7 @@ struct RansWordTables
 int				rans7_encode(const void *src, int nsymbols, int bytespersymbol, unsigned char *&dst, unsigned long long &dst_size, unsigned long long &dst_cap, int loud)
 {
 	PROF(WASTE);
+	auto t1=__rdtsc();
 	auto buffer=(const unsigned char*)src;
 	auto dst_start=dst_size;
 	int headersize=8+bytespersymbol*ANS_NLEVELS*sizeof(short);//14-bit histogram
@@ -1250,18 +1287,206 @@ int				rans7_encode(const void *src, int nsymbols, int bytespersymbol, unsigned 
 	auto temp=dst_start;
 	store_int_le(dst, temp, magic_ac07);
 	for(int kc=0;kc<bytespersymbol;++kc)
-		if(!ans_calc_histogram(buffer+kc, nsymbols, bytespersymbol, (unsigned short*)(dst+dst_start+8+kc*(ANS_NLEVELS*sizeof(short))), ANS7_PROB_BITS, false))
+		if(!ans_calc_histogram(buffer+kc, nsymbols, bytespersymbol, (unsigned short*)(dst+dst_start+8+kc*(ANS_NLEVELS*sizeof(short))), 16, false))
 			return false;
-	return false;//TODO
+	
+	SymbolInfo *info=nullptr;
+	unsigned char *CDF2sym=nullptr;
+	if(!rans4_prep(dst+dst_start+8, bytespersymbol, info, CDF2sym, loud))
+		return false;
+	
+	unsigned state[16]={};
+	for(int kc=0;kc<bytespersymbol;++kc)
+		state[kc]=0x10000;
+	int framebytes=nsymbols*bytespersymbol;
+	auto srcptr=buffer;
+	PROF(PREP);
+	for(int ks=0;ks<framebytes;++ks)
+	{
+		int kc=ks%bytespersymbol;
+
+		auto &x=state[kc];
+		auto s=*srcptr;
+		++srcptr;
+		auto &si=info[kc<<ANS_DEPTH|s];
+		PROF(FETCH);
+
+		if(!si.freq)
+			FAIL("Symbol 0x%02X has zero frequency", s);
+
+		if(x>=si.renorm_limit)//renormalize
+		{
+			if(!emit_short_le(dst, dst_size, dst_cap, (unsigned)x))
+			{
+				free(info);
+				return false;
+			}
+#ifdef ANS_PRINT_EMITS
+			if(ANS_PRINT_EMITS)
+				printf("kc %d emit %04X[%04X] idx %lld\n", kc, x>>16, x&0xFFFF, dst_size);
+#endif
+			x>>=16;
+		}
+		PROF(RENORM);
+#ifdef ANS_PRINT_STATE2
+		if(ANS_PRINT_STATE2)
+			printf("kc %d x %08X->%08X f %04X c %04X max %08X\n",
+				kc, x, (x/si.freq<<ANS_PROB_BITS)+x%si.freq+si.CDF, si.freq, si.CDF, si.renorm_limit);
+			//printf("kc %d enc: 0x%08X = (0x%08X/%04X<<%d)+%08X%%%04X+%04X\n",
+			//	kc, (x/si.freq<<ANS_PROB_BITS)+x%si.freq+si.CDF, x, si.freq, ANS_PROB_BITS, x, si.freq, si.CDF);
+#endif
+#ifdef ANS_ENC_DIV_FREE
+#ifdef __GNUC__
+		unsigned long long q=(unsigned long long)((unsigned __int128)x*si.inv_freq)>>64;
+#else
+		unsigned long long q=__umulh(x, si.inv_freq);
+#endif
+		x+=(q>>si.shift)*si.cmpl_freq+si.bias;//Ryg's division-free rANS encoder	https://github.com/rygorous/ryg_rans/blob/master/rans_byte.h
+#else
+		x=(x/si.freq<<ANS_PROB_BITS)+x%si.freq+si.CDF;
+	
+	//	lldiv_t result=lldiv(x, si.freq);//because unsigned
+	//	x=((result.quot<<ANS_PROB_BITS)|result.rem)+si.CDF;
+#endif
+		PROF(UPDATE);
+	}
+	for(int kc=0;kc<bytespersymbol;++kc)
+	{
+		if(!emit_short_le(dst, dst_size, dst_cap, (unsigned)state[kc]))
+		{
+			free(info);
+			return false;
+		}
+		if(!emit_short_le(dst, dst_size, dst_cap, (unsigned)(state[kc]>>16)))
+		{
+			free(info);
+			return false;
+		}
+#ifdef ANS_PRINT_EMITS
+		if(ANS_PRINT_EMITS)
+			printf("kc %d emit [%08X] idx %lld\n", kc, state[kc], dst_size);
+#endif
+	}
+	int csize=(int)(dst_size-dst_start);
+	dst_start+=4;
+	store_int_le(dst, dst_start, csize);
+	//printf("\nenc csize=%d\n", csize);//
+	free(info);
+	auto t2=__rdtsc();
+	if(loud)
+	{
+		int imsize=nsymbols;
+		int original_bitsize=imsize*bytespersymbol<<3, compressed_bitsize=(int)(dst_size-dst_start)<<3;
+		printf("AC_CL encode:  %lld cycles, %lf c/byte\n", t2-t1, (double)(t2-t1)/(original_bitsize>>3));
+		printf("Size: %d -> %d bytes, ratio: %lf, %lf bpp\n", original_bitsize>>3, compressed_bitsize>>3, (double)original_bitsize/compressed_bitsize, (double)compressed_bitsize/imsize);
+
+		//printf("Bit\tsize\tratio,\tbytes/bitplane = %d\n", imsize>>3);
+		//for(int k=0;k<depth;++k)
+		//	printf("%2d\t%5d\t%lf\n", k, csizes[k], (double)imsize/(csizes[k]<<3));
+		
+		printf("Preview:\n");
+		int kprint=(int)(dst_size-dst_start);
+		//if(kprint>200)
+		//	kprint=200;
+		for(int k=0;k<kprint;++k)
+			printf("%02X-", dst[dst_start+k]&0xFF);
+		printf("\n");
+	}
+	return true;
 }
 int				rans7_decode(const unsigned char *src, unsigned long long &src_idx, unsigned long long src_size, void *dst, int nsymbols, int bytespersymbol, int loud, const void *guide)
 {
 	PROF(WASTE);
 	int tag=load_int_le(src+src_idx);
-	if(tag!=magic_ac05)
+	if(tag!=magic_ac07)
 		FAIL("Lost at %lld: found 0x%08X, magic = 0x%08X", src_idx, tag, magic_ac05);
 	auto hist=(unsigned short*)(src+src_idx+8);
-	return false;//TODO
+
+	//printf("idx = %lld\n", src_idx+8);//
+	SymbolInfo64 *info=nullptr;
+	unsigned char *CDF2sym=nullptr;
+	if(!rans6_prep(hist, bytespersymbol, info, CDF2sym, loud))
+		return false;
+
+	unsigned state[16]={};
+	const unsigned char *srcptr=nullptr;
+	unsigned char *dstptr=nullptr;
+	int headersize=8+bytespersymbol*ANS_NLEVELS*sizeof(short);
+	auto src_start=src+src_idx+headersize;
+	int csize=load_int_le(src+src_idx+4);
+	//printf("\ndec csize=%d\n", csize);//
+	int framebytes=nsymbols*bytespersymbol;
+
+	if(src_start)
+		srcptr=src+src_idx+csize;
+	if(dst)
+		dstptr=(unsigned char*)dst+framebytes;
+
+	if(src_start+(bytespersymbol<<3)>srcptr)
+		FAIL("Not enough data to initialize state");
+	for(int kc=bytespersymbol-1;kc>=0;--kc)
+	{
+		srcptr-=2, state[kc]=*(const unsigned short*)srcptr;
+		srcptr-=2, state[kc]=state[kc]<<16|*(const unsigned short*)srcptr;
+#ifdef ANS_PRINT_READS
+		if(ANS_PRINT_READS)
+			printf("kc %d read %08X idx %lld\n", kc, state[kc], (long long)(srcptr-src));
+#endif
+	}
+
+	PROF(PREP);
+	for(int ks=framebytes-1;ks>=0;--ks)
+	{
+		//if(dstptr<dst)
+		//	FAIL("dstptr is out of bounds: ks=%d, frame = %d bytes,\ndstptr=%p, start=%p", ks, framebytes, dstptr, dst);
+		int kc=ks%bytespersymbol;
+
+		auto &x=state[kc];
+		auto c=(unsigned short)x;
+		auto s=CDF2sym[kc<<ANS_PROB_BITS|c];
+		auto &si=info[kc<<ANS_DEPTH|s];
+		if(!si.freq)
+		{
+			free(info);
+			FAIL("Symbol 0x%02X has zero frequency", s);
+		}
+		--dstptr;
+		*dstptr=s;
+		PROF(FETCH);
+#ifdef ANS_PRINT_STATE2
+		if(ANS_PRINT_STATE2)
+			printf("kc %d x %08X->%08X f %04X c %04X\n", kc, x, si.freq*(x>>ANS_PROB_BITS)+c-si.CDF, si.freq, si.CDF);
+		//	printf("kc %d dec: 0x%08X = 0x%04X*(0x%08X>>%d)+0x%04X-0x%08X\n",
+		//		kc, si.freq*(x>>ANS_PROB_BITS)+c-si.CDF, (int)si.freq, x, ANS_PROB_BITS, c, si.CDF);
+#endif
+		x=si.freq*(x>>ANS_PROB_BITS)+c-si.CDF;
+		PROF(UPDATE);
+
+		if(x<0x00010000)
+		{
+#ifdef ANS_PRINT_READS
+			if(ANS_PRINT_READS)
+				printf("kc %d read <-%04X %04X[%04X] idx %lld\n", kc, x>>16, x&0xFFFF, *(const unsigned short*)srcptr, (long long)(srcptr-src));
+#endif
+			srcptr-=2, x=x<<16|*(const unsigned short*)srcptr;
+		}
+		PROF(RENORM);
+
+		if(srcptr<src_start)
+		{
+			free(info);
+			FAIL("srcptr < start: ks=%d, frame = %d bytes, s = 0x%02X,\nsrcptr=%p, start=%p", ks, framebytes, *dstptr, srcptr, src_start);
+		}
+		if(guide&&((unsigned char*)guide)[ks]!=*dstptr)
+		{
+			free(info);
+			FAIL("Decode error at byte %d/%d: decoded 0x%02X != original 0x%02X", ks, framebytes, *dstptr&0xFF, ((unsigned char*)guide)[ks]&0xFF);
+		}
+	}
+
+	src_idx+=csize;
+	free(info);
+	return true;
 }
 
 //AVX2 rANS
@@ -1274,6 +1499,7 @@ int				rans8_decode(const unsigned char *src, unsigned long long &src_idx, unsig
 	return false;//TODO
 }
 
+#ifndef NO_OPENCL
 //OpenCL ABAC - 32-bit only
 const char		cl_kernels[]="cl_kernels.h";
 const int		ABAC9_DEPTH=32,
@@ -2057,3 +2283,4 @@ int				ans9_decode(const unsigned char *src, unsigned long long &src_idx, unsign
 	}
 	return true;
 }
+#endif

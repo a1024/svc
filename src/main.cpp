@@ -28,9 +28,11 @@
 #pragma		comment(lib, "libsvc.lib")
 #endif
 
-//	#define		DEBUG_TEST
-//	#define		PRINT_PROGRESS
+	#define		DEBUG_TEST
+
+	#define		PRINT_PROGRESS
 //	#define		DEBUG_GUIDE
+
 //	#define		SINGLE_EXECUTABLE
 
 
@@ -236,6 +238,7 @@ void		print_sbuf(const unsigned char *buffer, unsigned long long bytesize)
 }
 #ifdef DEBUG_TEST
 const int
+//	iw=8, ih=8,
 	iw=31, ih=17,
 	image_size=iw*ih;
 unsigned	buf[image_size]=
@@ -275,6 +278,15 @@ unsigned	buf[image_size]=
 	201, 201, 202, 202, 203, 205, 205, 205, 204, 203, 202, 202, 202, 203, 204, 204, 204, 203, 203, 203, 204, 204, 204, 204, 204, 206, 206, 206, 206, 206, 207,
 	200, 202, 202, 203, 204, 206, 206, 206, 205, 204, 204, 203, 203, 204, 204, 204, 204, 205, 204, 204, 205, 205, 205, 206, 206, 207, 207, 207, 207, 207, 208,
 
+	//0, 0, 0, 0, 0, 1, 3, 4,
+	//1, 0, 0, 0, 0, 0, 0, 0,
+	//1, 0, 1, 0, 0, 0, 0, 0,
+	//3, 2, 1, 0, 0, 0, 0, 0,
+	//6, 5, 3, 0, 0, 0, 0, 0,
+	//2, 3, 1, 0, 0, 1, 1, 0,
+	//0, 1, 1, 0, 2, 5, 5, 2,
+	//0, 2, 3, 1, 2, 4, 3, 0,
+
 	//0, 0, 0, 0, 0, 1, 3, 4, 12, 7, 1, 0, 0, 1, 2, 2,
 	//1, 0, 0, 0, 0, 0, 0, 0,  8, 4, 1, 0, 0, 2, 2, 0,
 	//1, 0, 1, 0, 0, 0, 0, 0,  3, 1, 0, 0, 0, 0, 0, 0,
@@ -309,6 +321,7 @@ unsigned	buf[image_size]=
 	//0x08090A0B, 0x0C0D0E0F,
 };
 int			b2[image_size];
+#if 0
 static size_t GetStackUsage()//https://stackoverflow.com/questions/1740888/determining-stack-space-with-visual-studio
 {
     MEMORY_BASIC_INFORMATION mbi;
@@ -327,6 +340,16 @@ static size_t GetStackUsage()//https://stackoverflow.com/questions/1740888/deter
     // now (mbi.BaseAddress, mbi.RegionSize) describe the committed (i.e. accessed) portion of the stack
 
     return mbi.RegionSize;
+}
+#endif
+void		print_xor(int *b1, int *b2, int bw, int bh, int x1, int x2, int y1, int y2)
+{
+	for(int ky=y1;ky<y2;++ky)
+	{
+		for(int kx=x1;kx<x2;++kx)
+			printf("%02X-", b1[bw*ky+kx]^b2[bw*ky+kx]);
+		printf("\n");
+	}
 }
 void		test()
 {
@@ -363,10 +386,11 @@ void		test()
 	auto decoder=svc_dec_start(cdata, csize);	SVC_CHECK();
 	SVCHeader info={};
 	svc_dec_get_info(decoder, &info);			SVC_CHECK();
-	svc_dec_get_frame(decoder, b2, nullptr);		SVC_CHECK();
+	svc_dec_get_frame(decoder, b2, buf);		SVC_CHECK();
 	printf("decoded 1:\n"), print_ibuf(b2, iw, ih, 0, iw, 0, ih);
 //	svc_dec_get_frame(decoder, b2, buf);		SVC_CHECK();
 	//printf("decoded 2:\n"), print_ibuf(b2, iw, ih, 0, iw, 0, ih);
+	printf("xor:\n"), print_xor((int*)buf, b2, iw, ih, 0, iw, 0, ih);
 	svc_cleanup(decoder);		SVC_CHECK();
 
 	delete[] cdata;

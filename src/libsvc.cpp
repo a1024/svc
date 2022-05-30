@@ -188,13 +188,14 @@ int				svc_enc_add_frame(SVCContext handle, const void *data)
 #elif defined ANS_64BIT
 	if(!rans6_encode(frame, context->frame_res, context->nchannels*sample_size, context->out_data, context->out_size, context->out_cap, loud))
 		return 0;
-#else
+#elif defined ANS_32BIT
 	if(!rans4_encode(frame, context->frame_res, context->nchannels*sample_size, context->out_data, context->out_size, context->out_cap, loud))
 		return 0;
+#else
+	for(int k=0;k<context->nchannels;++k)
+		if(!abac4_encode((char*)frame+k*sample_size, context->frame_res, context->depth, context->nchannels*sample_size, context->out_data, context->out_size, context->out_cap, loud))
+			return 0;
 #endif
-	//for(int k=0;k<context->nchannels;++k)
-	//	if(!abac4_encode((char*)context->prev_frame+k*sample_size, context->frame_res, context->depth, context->nchannels*sample_size, context->out_data, context->out_size, context->out_cap, loud))
-	//		return;
 #ifdef SUBTRACT_PREV_FRAME
 	memcpy(context->prev_frame, data, context->frame_bytesize);
 #endif
@@ -328,15 +329,16 @@ void			svc_dec_get_frame(SVCContext handle, void *data, const void *guide)
 #elif defined ANS_64BIT
 	if(!rans6_decode(context->in_data, context->in_idx, context->in_size, data, context->frame_res, context->nchannels*sample_size, loud, g2))
 		return;
-#else
+#elif defined ANS_32BIT
 	if(!rans4_decode(context->in_data, context->in_idx, context->in_size, data, context->frame_res, context->nchannels*sample_size, loud, g2))
 		return;
+#else
+	for(int k=0;k<context->nchannels;++k)
+		if(!abac4_decode(context->in_data, context->in_idx, context->in_size, (char*)data+k*sample_size, context->frame_res, context->depth, context->nchannels*sample_size, loud))
+			return;
 #endif
 	if(g2)
 		delete[] g2;
-	//for(int k=0;k<context->nchannels;++k)
-	//	if(!abac4_decode(context->in_data, context->in_idx, context->in_size, (char*)data+k*sample_size, context->frame_res, context->depth, context->nchannels*sample_size, loud))
-	//		return;
 #ifdef SUBTRACT_PREV_FRAME
 	if(!context->frame_idx)
 	{
