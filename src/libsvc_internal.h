@@ -41,7 +41,7 @@
 
 //	#define		SUBTRACT_PREV_FRAME
 
-	#define		DEBUG_PRINT
+//	#define		PRINT_ABAC
 
 //utility
 #ifdef __linux__

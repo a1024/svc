@@ -183,18 +183,18 @@ int				abac4_encode(const void *src, int imsize, int depth, int bytestride, unsi
 
 		u64 hitcount=1;
 		
-#ifdef DEBUG_PRINT
+#ifdef PRINT_ABAC
 		printf("\n");//
 #endif
 		for(int kb=0, kb2=0;kb<imsize;++kb, kb2+=bytestride)//analyze bitplane
 		{
 			int bit=buffer[kb2+bit_offset]>>bit_shift&1;
-			unsigned p0=((long long)(prob-0x8000)*prob_correct>>16);
+			int p0=((long long)(prob-0x8000)*prob_correct>>16);
 			p0+=0x8000;
 			//unsigned p0=0x8000+(long long)(prob-0x8000)*hitcount/(kb+1);
 			p0=clamp(1, p0, prob_max);
 			int correct=bit^(p0>=0x8000);
-#ifdef DEBUG_PRINT
+#ifdef PRINT_ABAC
 			printf("%d", bit);//
 #endif
 			//if(kp==1)
@@ -205,7 +205,7 @@ int				abac4_encode(const void *src, int imsize, int depth, int bytestride, unsi
 			prob=!bit<<15|prob>>1;
 			prob_correct=correct<<15|prob_correct>>1;
 		}
-#ifdef DEBUG_PRINT
+#ifdef PRINT_ABAC
 		printf("\n");//
 #endif
 		PROF(ENC_ANALYZE_PLANE);
@@ -216,7 +216,7 @@ int				abac4_encode(const void *src, int imsize, int depth, int bytestride, unsi
 
 		if(hitcount<imsize*min_conf)//incompressible, bypass
 		{
-#ifdef DEBUG_PRINT
+#ifdef PRINT_ABAC
 			printf("BYPASS\n");//
 #endif
 			int planesize=(imsize+7)>>3;
@@ -281,10 +281,12 @@ int				abac4_encode(const void *src, int imsize, int depth, int bytestride, unsi
 					start=0, range=0xFFFFFFFF;//because 1=0.9999...
 				}
 				
-				unsigned p0=prob-0x8000;
+				//if(kp==7&&kb==5)
+				//	int LOL_1=0;
+				int p0=prob-0x8000;
 				p0=p0*prob_correct>>16;
 				p0=p0*prob_correct>>16;
-				int sure=-(prevbit==prevbit0);
+				int sure=-(prevbit==prevbit0)&-(kp!=depth-1);
 				p0=p0*(hitratio_notsure+(hitratio_delta&sure))>>16;
 				//p0=p0*(prevbit==prevbit0?hitratio_sure:hitratio_notsure)>>16;
 				//p0=(long long)p0*hitcount>>16;
@@ -328,6 +330,9 @@ int				abac4_encode(const void *src, int imsize, int depth, int bytestride, unsi
 				hitnum+=correct, ++hitden;
 #endif
 				auto start0=start;
+#ifdef PRINT_ABAC
+				auto r0=range;
+#endif
 				if(bit)
 				{
 					++r2;
@@ -337,6 +342,10 @@ int				abac4_encode(const void *src, int imsize, int depth, int bytestride, unsi
 				else
 					range=r2-1;
 				//	end=middle-1;
+#ifdef PRINT_ABAC
+				if(kp==0)
+					printf("%d %d bit %d p0 %04X %08X+%08X -> %08X+%08X\n", kp, kb, bit, p0, start0, r0, start, range);
+#endif
 				if(start<start0)//
 				{
 					FAIL("AC OVERFLOW: start = %08X -> %08X, r2 = %08X", start0, start, r2);
@@ -358,6 +367,7 @@ int				abac4_encode(const void *src, int imsize, int depth, int bytestride, unsi
 					range=range<<8|0xFF;
 				}
 			}
+			//start+=range>>1;
 			emit_byte(out_data, out_size, out_cap, start>>24);//big endian
 			emit_byte(out_data, out_size, out_cap, start>>16&0xFF);
 			emit_byte(out_data, out_size, out_cap, start>>8&0xFF);
@@ -492,10 +502,12 @@ int				abac4_decode(const unsigned char *in_data, unsigned long long &in_idx, un
 				prevbit=buffer[kb2+bit_offset2]>>bit_shift2&1;
 		//	int prevbit=buffer[kb]>>(kp+1)&1;
 #endif
-			unsigned p0=prob-0x8000;
+			//if(kp==7&&kb==5)
+			//	int LOL_1=0;
+			int p0=prob-0x8000;
 			p0=p0*prob_correct>>16;
 			p0=p0*prob_correct>>16;
-			int sure=-(prevbit==prevbit0);
+			int sure=-(prevbit==prevbit0)&-(kp!=depth-1);
 			p0=p0*(hitratio_notsure+(hitratio_delta&sure))>>16;
 			//p0=p0*(prevbit==prevbit0?hitratio_sure:hitratio_notsure)>>16;
 			//p0=(long long)p0*hitcount>>16;
@@ -538,6 +550,10 @@ int				abac4_decode(const unsigned char *in_data, unsigned long long &in_idx, un
 			prevbit0=prevbit;
 #endif
 			
+#ifdef PRINT_ABAC
+			auto start0=start;
+			auto r0=range;
+#endif
 			if(bit)
 			{
 				++r2;
@@ -547,6 +563,10 @@ int				abac4_decode(const unsigned char *in_data, unsigned long long &in_idx, un
 			else
 				range=r2-1;
 			//	end=middle-1;
+#ifdef PRINT_ABAC
+			if(kp==0)
+				printf("%d %d bit %d p0 %04X %08X+%08X -> %08X+%08X c %08X\n", kp, kb, bit, p0, start0, r0, start, range, code);
+#endif
 			
 			buffer[kb2+bit_offset]|=bit<<bit_shift;
 		//	buffer[kb]|=bit<<kp;
